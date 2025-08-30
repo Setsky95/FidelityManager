@@ -31,7 +31,6 @@ function ProtectedArea() {
           <Route path="/reports" component={Reports} />
           <Route path="/automations" component={Automations} />
           <Route path="/listas" component={Listas} />
-          <Route component={SignIn} />
         </Switch>
       </div>
     </div>
@@ -49,6 +48,8 @@ export default function App() {
             <Route path="/login" component={LoginPage} />
             <Route path="/" component={HomePage} />
             <Route path="/sumate" component={SumatePage} />
+                      <Route component={SignIn} />
+
 
             {/* Protegidas */}
             <Route>
