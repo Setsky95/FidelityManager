@@ -1,31 +1,29 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getTemplateByKey, renderTemplate } from "../_lib/templates";
-import { sendEmail } from "../email";
+import { sendEmail } from "../_lib/email";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   try {
-    const { to, template, key, data } = req.body ?? {};
+    const { to, template, key, data } = req.body || {};
     if (!to) return res.status(400).json({ ok: false, error: 'Falta "to"' });
 
-    const tpl = template && (template.subject || template.body)
-      ? {
-          from: template.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
-          subject: String(template.subject || ""),
-          body: String(template.body || ""),
-          enabled: true,
-        }
-      : await getTemplateByKey(key || "welcome");
+    // Para test: si no mandan template usamos uno mínimo
+    const subject = template?.subject || "Test automation";
+    const html = template?.body || "<p>Hola {{nombre}}, este es un test.</p>";
+    const ctx = {
+      nombre: "Seba",
+      ...data,
+    };
 
-    if (tpl.enabled === false) return res.status(400).json({ ok: false, error: "Template deshabilitado" });
+    const render = (s: string) => s.replace(/\{\{(\w+)\}\}/g, (_m, k) => (ctx as any)[k] ?? "");
 
-    const sample = { nombre: "Seba", apellido: "Pavlotsky", email: to, id: "VG999", puntos: 123, delta: 45, threshold: 200 };
-    const ctx = { ...sample, ...(data || {}) };
-    const subject = renderTemplate(tpl.subject || "Test automation", ctx);
-    const html = renderTemplate(tpl.body || "<p>Hola {{nombre}}, este es un test.</p>", ctx);
+    const info = await sendEmail({
+      to,
+      subject: render(subject),
+      html: render(html),
+      from: template?.from, // si coincide con GMAIL_USER o alias, se respeta
+    });
 
-    const info = await sendEmail({ to, subject, html, from: tpl.from });
-    return res.json({ ok: true, messageId: info.messageId });
+    res.status(200).json({ ok: true, messageId: info.messageId });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "Error automations/test-email" });
+    res.status(500).json({ ok: false, error: e?.message, response: e?.response });
   }
 }

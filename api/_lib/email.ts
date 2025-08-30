@@ -1,4 +1,3 @@
-// api/_lib/email.ts
 import nodemailer from "nodemailer";
 
 const user = process.env.GMAIL_USER!;
@@ -41,8 +40,7 @@ export async function sendEmail(opts: {
 }) {
   const { name, email: wanted } = parseFrom(opts.from);
   const wantedLc = (wanted || "").toLowerCase();
-  const isAllowed = !wanted || wantedLc === user || ALLOWED.includes(wantedLc);
-
+  const isAllowed = !wanted || wantedLc === user.toLowerCase() || ALLOWED.includes(wantedLc);
   const fromEmail = isAllowed ? (wanted || user) : user;
   const display = name ? `"${name}" <${fromEmail}>` : fromEmail;
   const replyTo = isAllowed ? (opts.replyTo || undefined) : (wanted || opts.replyTo || undefined);

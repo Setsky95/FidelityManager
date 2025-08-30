@@ -14,11 +14,11 @@ import Dashboard from "@/pages/dashboard";
 import Members from "@/pages/members";
 import Reports from "@/pages/reports";
 import SignIn from "@/pages/sign-in";
-import NotFound from "@/pages/not-found";
 import Automations from "./pages/automations";
 import SumatePage from "./pages/SumatePage";
 import Listas from "./pages/lists";
 import HomePage from "./pages/homePage"; // 👈 renombrá el componente exportado a HomePage
+import LoginPage from "./pages/loginPage";
 
 function ProtectedArea() {
   return (
@@ -31,7 +31,7 @@ function ProtectedArea() {
           <Route path="/reports" component={Reports} />
           <Route path="/automations" component={Automations} />
           <Route path="/listas" component={Listas} />
-          <Route component={NotFound} />
+          <Route component={SignIn} />
         </Switch>
       </div>
     </div>
@@ -46,7 +46,7 @@ export default function App() {
         <AuthProvider>
           <Switch>
             {/* Públicas */}
-            <Route path="/sign-in" component={SignIn} />
+            <Route path="/login" component={LoginPage} />
             <Route path="/" component={HomePage} />
             <Route path="/sumate" component={SumatePage} />
 

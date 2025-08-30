@@ -40,7 +40,7 @@ export default function HomePage() {
               </Button>
               <Button asChild size="lg" variant="outline" className="gap-2 text-black ">
                 {/* Cambiá el destino si tenés login: to="/login" */}
-                <Link to="/Sumate">
+                <Link to="/login">
                   Ingresar <LogIn className="h-4 w-4 " />
                 </Link>
               </Button>
