@@ -1,0 +1,24 @@
+{
+  "welcomeEmail": {
+    "enabled": true,
+    "to": "",
+    "from": "sebapavlotsky@gmail.com",
+    "subject": "¡Bienvenido/a, {{nombre}}!",
+    "body": "<h1>Hola {{nombre}}</h1><p>Tu ID es {{id}}</p>"
+  },
+  "pointsAddEmail": {
+    "enabled": false,
+    "to": "",
+    "from": "sebapavlotsky@gmail.com",
+    "subject": "¡Sumaste {{delta}} puntos!",
+    "body": "<p>Hola {{nombre}}, acabás de sumar <b>{{delta}}</b> puntos. Tu total ahora es <b>{{puntos}}</b>.</p>"
+  },
+  "levelUpEmail": {
+    "enabled": false,
+    "to": "",
+    "from": "sebapavlotsky@gmail.com",
+    "subject": "¡Llegaste a {{threshold}} puntos!",
+    "body": "<h2>¡Felicitaciones, {{nombre}}!</h2><p>Tu total alcanzó <b>{{puntos}}</b> puntos (umbral: <b>{{threshold}}</b>).</p>",
+    "threshold": 10
+  }
+}

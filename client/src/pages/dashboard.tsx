@@ -6,6 +6,8 @@ import { MembersTable } from "@/components/members-table";
 import { AddMemberModal } from "@/components/add-member-modal";
 import { EditPointsModal } from "@/components/edit-points-modal";
 import { useMembers } from "@/hooks/use-members";
+import { QuickAddPoints } from "@/components/quick-add-points";
+
 import { useStats } from "@/hooks/use-stats";
 import type { Member, InsertMember, UpdatePoints } from "@shared/schema";
 
@@ -83,6 +85,20 @@ export default function Dashboard() {
           {/* Stats Cards */}
           <StatsCards stats={stats} isLoading={statsLoading} />
 
+          
+<QuickAddPoints
+  members={members}
+  isSubmitting={updatePoints.isPending}
+  onAddPoints={async (memberId, amount) => {
+    const m = members.find((x) => x.id === memberId);
+    if (!m) return;
+    await updatePoints.mutateAsync({
+      memberId,
+      currentPoints: m.puntos,
+      update: { operation: "add", amount, reason: "Carga rápida" },
+    });
+  }}
+/>
           {/* Members Management Section */}
           <MembersTable
             members={members}

@@ -1,0 +1,656 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Van Gogh - Programa de Fidelidad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#3B82F6',
+                        'primary-dark': '#2563EB',
+                        'secondary': '#6B7280',
+                        'success': '#10B981',
+                        'warning': '#F59E0B',
+                        'error': '#EF4444',
+                        'surface': '#F9FAFB',
+                        'card': '#FFFFFF'
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-surface min-h-screen font-sans">
+    <!-- @COMPONENT: AppLayout [main layout wrapper] -->
+    <div class="flex h-screen bg-surface">
+        
+        <!-- @COMPONENT: Sidebar [navigation sidebar] -->
+        <!-- Sidebar -->
+        <div class="hidden md:flex md:flex-shrink-0 md:w-64 bg-card shadow-lg">
+            <div class="flex flex-col w-full">
+                <!-- Logo -->
+                <div class="flex items-center justify-center h-16 px-4 bg-primary">
+                    <h1 class="text-xl font-bold text-white">Van Gogh Fidelidad</h1>
+                </div>
+                
+                <!-- Navigation -->
+                <nav class="flex-1 px-4 py-6 space-y-2">
+                    <a href="#" data-event="click:navigateTo" data-implementation="Should navigate to dashboard" 
+                       class="flex items-center px-4 py-3 text-sm font-medium text-gray-700 bg-primary bg-opacity-10 rounded-lg">
+                        <i class="fas fa-tachometer-alt mr-3 text-primary"></i>
+                        Dashboard
+                    </a>
+                    <a href="#" data-event="click:navigateTo" data-implementation="Should navigate to members list"
+                       class="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-users mr-3"></i>
+                        Socios
+                    </a>
+                    <a href="#" data-event="click:navigateTo" data-implementation="Should navigate to add member form"
+                       class="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-user-plus mr-3"></i>
+                        Agregar Socio
+                    </a>
+                    <a href="#" data-event="click:navigateTo" data-implementation="Should navigate to reports"
+                       class="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-chart-bar mr-3"></i>
+                        Reportes
+                    </a>
+                </nav>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: MainContent [main content area] -->
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            
+            <!-- @COMPONENT: Header [top header bar] -->
+            <!-- Header -->
+            <header class="bg-card shadow-sm border-b border-gray-200">
+                <div class="flex items-center justify-between px-6 py-4">
+                    <div class="flex items-center">
+                        <button class="md:hidden p-2 rounded-lg hover:bg-gray-100" data-event="click:toggleMobileMenu">
+                            <i class="fas fa-bars text-gray-600"></i>
+                        </button>
+                        <h2 class="ml-2 text-2xl font-semibold text-gray-900">Dashboard de Socios</h2>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <!-- @COMPONENT: NotificationBell [notification indicator] -->
+                        <button class="p-2 rounded-lg hover:bg-gray-100 relative" data-event="click:showNotifications">
+                            <i class="fas fa-bell text-gray-600"></i>
+                            <span class="absolute -top-1 -right-1 h-3 w-3 bg-error rounded-full"></span>
+                        </button>
+                        <!-- @END_COMPONENT: NotificationBell -->
+                        
+                        <!-- @COMPONENT: UserProfile [user profile dropdown] -->
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                                <i class="fas fa-user text-white text-sm"></i>
+                            </div>
+                            <span class="text-sm font-medium text-gray-700" data-bind="user.name">Admin</span>
+                        </div>
+                        <!-- @END_COMPONENT: UserProfile -->
+                    </div>
+                </div>
+            </header>
+            <!-- @END_COMPONENT: Header -->
+
+            <!-- @COMPONENT: DashboardContent [main dashboard content] -->
+            <!-- Dashboard Content -->
+            <main class="flex-1 overflow-y-auto bg-surface">
+                <div class="p-6">
+                    
+                    <!-- @COMPONENT: StatsCards [statistics overview cards] -->
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <!-- @MAP: statsData.map(stat => ( -->
+                        <div class="bg-card rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-users text-primary"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Total Socios</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.totalMembers">1,247</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-success bg-opacity-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-coins text-success"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Puntos Totales</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.totalPoints">98,456</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-warning bg-opacity-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-user-plus text-warning"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Nuevos Este Mes</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.newThisMonth">34</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-purple-500 bg-opacity-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-star text-purple-500"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Promedio Puntos</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.averagePoints">79</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                    <!-- @END_COMPONENT: StatsCards -->
+
+                    <!-- @COMPONENT: MembersSection [members management section] -->
+                    <!-- Members Management Section -->
+                    <div class="bg-card rounded-lg shadow-sm border border-gray-200">
+                        
+                        <!-- @COMPONENT: SectionHeader [section header with actions] -->
+                        <!-- Section Header -->
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                                <h3 class="text-lg font-semibold text-gray-900">Gestión de Socios</h3>
+                                
+                                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                                    <!-- @COMPONENT: SearchBar [search input] -->
+                                    <div class="relative">
+                                        <input type="text" 
+                                               placeholder="Buscar socios..." 
+                                               data-event="input:handleSearch" 
+                                               data-implementation="Should filter members list based on search query"
+                                               class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent w-full sm:w-64">
+                                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                    </div>
+                                    <!-- @END_COMPONENT: SearchBar -->
+                                    
+                                    <button data-event="click:openAddMemberModal" 
+                                            data-implementation="Should open add member modal form"
+                                            class="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                                        <i class="fas fa-plus mr-2"></i>
+                                        Agregar Socio
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_COMPONENT: SectionHeader -->
+
+                        <!-- @COMPONENT: MembersTable [main data table] -->
+                        <!-- Members Table -->
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <button data-event="click:sortBy" data-field="name" class="flex items-center space-x-1 hover:text-gray-700">
+                                                <span>Socio</span>
+                                                <i class="fas fa-sort text-gray-400"></i>
+                                            </button>
+                                        </th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <button data-event="click:sortBy" data-field="email" class="flex items-center space-x-1 hover:text-gray-700">
+                                                <span>Email</span>
+                                                <i class="fas fa-sort text-gray-400"></i>
+                                            </button>
+                                        </th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <button data-event="click:sortBy" data-field="points" class="flex items-center space-x-1 hover:text-gray-700">
+                                                <span>Puntos</span>
+                                                <i class="fas fa-sort text-gray-400"></i>
+                                            </button>
+                                        </th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <!-- @MAP: members.map(member => ( -->
+                                    <tr class="hover:bg-gray-50" data-mock="true">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0 h-10 w-10">
+                                                    <div class="h-10 w-10 rounded-full bg-primary bg-opacity-10 flex items-center justify-center">
+                                                        <span class="text-sm font-medium text-primary" data-bind="member.initials">SP</span>
+                                                    </div>
+                                                </div>
+                                                <div class="ml-4">
+                                                    <div class="text-sm font-medium text-gray-900" data-bind="member.fullName">Sebastián Pavlotsky</div>
+                                                    <div class="text-sm text-gray-500" data-bind="member.joinDate">Miembro desde Oct 2023</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm text-gray-900" data-bind="member.email">sebapaviótsky@gmail.com</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success bg-opacity-10 text-success">
+                                                    <i class="fas fa-coins mr-1"></i>
+                                                    <span data-bind="member.points">156</span>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-bind="member.id">VG001</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div class="flex space-x-2">
+                                                <button data-event="click:editPoints" data-member-id="VG001"
+                                                        data-implementation="Should open edit points modal"
+                                                        class="text-primary hover:text-primary-dark">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button data-event="click:viewMember" data-member-id="VG001"
+                                                        data-implementation="Should open member details modal"
+                                                        class="text-gray-600 hover:text-gray-900">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button data-event="click:deleteMember" data-member-id="VG001"
+                                                        data-implementation="Should show delete confirmation"
+                                                        class="text-error hover:text-red-700">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    <!-- More sample rows -->
+                                    <tr class="hover:bg-gray-50" data-mock="true">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0 h-10 w-10">
+                                                    <div class="h-10 w-10 rounded-full bg-primary bg-opacity-10 flex items-center justify-center">
+                                                        <span class="text-sm font-medium text-primary">MG</span>
+                                                    </div>
+                                                </div>
+                                                <div class="ml-4">
+                                                    <div class="text-sm font-medium text-gray-900">María González</div>
+                                                    <div class="text-sm text-gray-500">Miembro desde Sep 2023</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm text-gray-900">maria.gonzalez@email.com</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success bg-opacity-10 text-success">
+                                                    <i class="fas fa-coins mr-1"></i>
+                                                    <span>230</span>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">VG002</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div class="flex space-x-2">
+                                                <button class="text-primary hover:text-primary-dark">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="text-gray-600 hover:text-gray-900">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="text-error hover:text-red-700">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    <tr class="hover:bg-gray-50" data-mock="true">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0 h-10 w-10">
+                                                    <div class="h-10 w-10 rounded-full bg-primary bg-opacity-10 flex items-center justify-center">
+                                                        <span class="text-sm font-medium text-primary">JR</span>
+                                                    </div>
+                                                </div>
+                                                <div class="ml-4">
+                                                    <div class="text-sm font-medium text-gray-900">Juan Rodríguez</div>
+                                                    <div class="text-sm text-gray-500">Miembro desde Ago 2023</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm text-gray-900">juan.rodriguez@email.com</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning bg-opacity-10 text-warning">
+                                                    <i class="fas fa-coins mr-1"></i>
+                                                    <span>45</span>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">VG003</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div class="flex space-x-2">
+                                                <button class="text-primary hover:text-primary-dark">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="text-gray-600 hover:text-gray-900">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="text-error hover:text-red-700">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- @END_MAP )) -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- @END_COMPONENT: MembersTable -->
+
+                        <!-- @COMPONENT: Pagination [table pagination] -->
+                        <!-- Pagination -->
+                        <div class="px-6 py-3 border-t border-gray-200 bg-gray-50">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm text-gray-700">
+                                    Mostrando <span class="font-medium" data-bind="pagination.start">1</span> a 
+                                    <span class="font-medium" data-bind="pagination.end">10</span> de 
+                                    <span class="font-medium" data-bind="pagination.total">97</span> resultados
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button data-event="click:previousPage" 
+                                            data-implementation="Should navigate to previous page"
+                                            class="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50" disabled>
+                                        Anterior
+                                    </button>
+                                    <button data-event="click:nextPage"
+                                            data-implementation="Should navigate to next page"
+                                            class="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                                        Siguiente
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_COMPONENT: Pagination -->
+                    </div>
+                    <!-- @END_COMPONENT: MembersSection -->
+                </div>
+            </main>
+            <!-- @END_COMPONENT: DashboardContent -->
+        </div>
+        <!-- @END_COMPONENT: MainContent -->
+    </div>
+    <!-- @END_COMPONENT: AppLayout -->
+
+    <!-- @COMPONENT: AddMemberModal [modal for adding new members] -->
+    <!-- Add Member Modal -->
+    <div id="addMemberModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 xl:w-1/3 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Agregar Nuevo Socio</h3>
+                    <button data-event="click:closeModal" data-implementation="Should close the modal"
+                            class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Modal Body -->
+                <form class="mt-6 space-y-6" data-event="submit:handleAddMember" data-implementation="Should validate and submit new member data to Firestore">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="firstName" class="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+                            <input type="text" 
+                                   id="firstName" 
+                                   name="firstName"
+                                   required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                                   placeholder="Ingrese el nombre">
+                        </div>
+                        <div>
+                            <label for="lastName" class="block text-sm font-medium text-gray-700 mb-2">Apellido</label>
+                            <input type="text" 
+                                   id="lastName" 
+                                   name="lastName"
+                                   required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                                   placeholder="Ingrese el apellido">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" 
+                               id="email" 
+                               name="email"
+                               required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                               placeholder="socio@email.com">
+                    </div>
+
+                    <div>
+                        <label for="initialPoints" class="block text-sm font-medium text-gray-700 mb-2">Puntos Iniciales</label>
+                        <input type="number" 
+                               id="initialPoints" 
+                               name="initialPoints"
+                               min="0"
+                               value="0"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                               placeholder="0">
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                        <button type="button" 
+                                data-event="click:closeModal"
+                                data-implementation="Should close modal without saving"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                data-implementation="Should validate form and create new member in Firestore"
+                                class="px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                            <i class="fas fa-plus mr-2"></i>
+                            Agregar Socio
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: AddMemberModal -->
+
+    <!-- @COMPONENT: EditPointsModal [modal for editing member points] -->
+    <!-- Edit Points Modal -->
+    <div id="editPointsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Editar Puntos</h3>
+                    <button data-event="click:closeModal" data-implementation="Should close the modal"
+                            class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="mt-6">
+                    <!-- Member Info -->
+                    <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-primary bg-opacity-10 rounded-full flex items-center justify-center">
+                                <span class="text-lg font-medium text-primary" data-bind="selectedMember.initials">SP</span>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900" data-bind="selectedMember.fullName">Sebastián Pavlotsky</div>
+                                <div class="text-sm text-gray-500" data-bind="selectedMember.email">sebapaviótsky@gmail.com</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form data-event="submit:handleUpdatePoints" data-implementation="Should update member points in Firestore">
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Puntos Actuales</label>
+                                <div class="text-2xl font-bold text-gray-900" data-bind="selectedMember.currentPoints">156</div>
+                            </div>
+
+                            <div>
+                                <label for="pointsOperation" class="block text-sm font-medium text-gray-700 mb-2">Operación</label>
+                                <select id="pointsOperation" 
+                                        name="pointsOperation"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="add">Agregar puntos</option>
+                                    <option value="subtract">Restar puntos</option>
+                                    <option value="set">Establecer puntos</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="pointsAmount" class="block text-sm font-medium text-gray-700 mb-2">Cantidad</label>
+                                <input type="number" 
+                                       id="pointsAmount" 
+                                       name="pointsAmount"
+                                       min="0"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                                       placeholder="Ingrese la cantidad">
+                            </div>
+
+                            <div>
+                                <label for="pointsReason" class="block text-sm font-medium text-gray-700 mb-2">Motivo (Opcional)</label>
+                                <textarea id="pointsReason" 
+                                          name="pointsReason"
+                                          rows="3"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                                          placeholder="Descripción del motivo del cambio..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Modal Footer -->
+                        <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                            <button type="button" 
+                                    data-event="click:closeModal"
+                                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                                Cancelar
+                            </button>
+                            <button type="submit" 
+                                    data-implementation="Should validate and update member points in Firestore"
+                                    class="px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                                <i class="fas fa-save mr-2"></i>
+                                Actualizar Puntos
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: EditPointsModal -->
+
+    <!-- @STATE: modalOpen:boolean = false -->
+    <!-- @STATE: selectedMember:Object = null -->
+    <!-- @STATE: members:Array = [] -->
+    <!-- @STATE: filteredMembers:Array = [] -->
+    <!-- @STATE: searchQuery:string = "" -->
+    <!-- @STATE: sortBy:string = "name" -->
+    <!-- @STATE: sortOrder:string = "asc" -->
+
+    <script>
+        (function() {
+            // TODO: Initialize Firebase and Firestore connection using provided config
+            // TODO: Implement member data fetching from Firestore
+            // TODO: Implement CRUD operations for members
+            // TODO: Implement search and filtering functionality
+            // TODO: Implement sorting functionality
+            // TODO: Implement modal management
+            // TODO: Implement form validation and submission
+            // TODO: Implement points management system
+            // TODO: Add error handling and loading states
+            // TODO: Implement real-time updates from Firestore
+
+            // Modal Management
+            function openModal(modalId) {
+                document.getElementById(modalId).classList.remove('hidden');
+            }
+
+            function closeModal(modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+            }
+
+            // Event Listeners for Demo Interactions
+            document.addEventListener('click', function(e) {
+                // Open Add Member Modal
+                if (e.target.closest('[data-event*="openAddMemberModal"]')) {
+                    openModal('addMemberModal');
+                }
+
+                // Open Edit Points Modal
+                if (e.target.closest('[data-event*="editPoints"]')) {
+                    openModal('editPointsModal');
+                }
+
+                // Close Modal
+                if (e.target.closest('[data-event*="closeModal"]')) {
+                    closeModal('addMemberModal');
+                    closeModal('editPointsModal');
+                }
+
+                // Close modal when clicking outside
+                if (e.target.id === 'addMemberModal' || e.target.id === 'editPointsModal') {
+                    closeModal(e.target.id);
+                }
+            });
+
+            // Form submission demo handlers
+            document.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (e.target.closest('#addMemberModal form')) {
+                    // TODO: Implement member creation logic
+                    alert('Nuevo socio agregado (Demo)');
+                    closeModal('addMemberModal');
+                }
+
+                if (e.target.closest('#editPointsModal form')) {
+                    // TODO: Implement points update logic
+                    alert('Puntos actualizados (Demo)');
+                    closeModal('editPointsModal');
+                }
+            });
+
+            // Search functionality demo
+            document.querySelector('[data-event*="handleSearch"]')?.addEventListener('input', function(e) {
+                // TODO: Implement real search functionality
+                console.log('Searching for:', e.target.value);
+            });
+
+        })();
+    </script>
+</body>
+</html>

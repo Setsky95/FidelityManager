@@ -1,4 +1,5 @@
-import { useState } from "react";
+// src/components/add-member-modal.tsx
+import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -6,76 +7,65 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Plus } from "lucide-react";
 import { insertMemberSchema, type InsertMember } from "@shared/schema";
-import { Plus, X } from "lucide-react";
+import { useMembers } from "@/hooks/use-members";
 
-interface AddMemberModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAddMember: (member: InsertMember) => Promise<void>;
-  isLoading?: boolean;
-}
+type Props = {
+  trigger: React.ReactNode;
+};
 
-export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddMemberModalProps) {
+export function AddMemberModal({ trigger }: Props) {
+  const [open, setOpen] = React.useState(false);
+  const { addMember } = useMembers(); // ⬅️ usamos la mutación (toast + invalidate)
+
   const form = useForm<InsertMember>({
     resolver: zodResolver(insertMemberSchema),
-    defaultValues: {
-      nombre: "",
-      apellido: "",
-      email: "",
-      puntos: 0,
-    },
+    defaultValues: { nombre: "", apellido: "", email: "", puntos: 0 },
+    mode: "onChange",
   });
 
-  const handleSubmit = async (data: InsertMember) => {
-    try {
-      await onAddMember(data);
-      form.reset();
-      onClose();
-    } catch (error) {
-      console.error("Error adding member:", error);
-    }
+  const submit = async (data: InsertMember) => {
+    // FirebaseService.addMember ya crea VG{n} internamente
+    await addMember.mutateAsync({
+      nombre: data.nombre.trim(),
+      apellido: data.apellido.trim(),
+      email: data.email.trim().toLowerCase(),
+      puntos: Number(data.puntos || 0),
+    });
+
+    // onSuccess del hook hace toast + invalidate
+    form.reset({ nombre: "", apellido: "", email: "", puntos: 0 });
+    setOpen(false);
   };
 
-  const handleClose = () => {
-    form.reset();
-    onClose();
+  // Evita cerrar mientras guarda
+  const handleOpenChange = (next: boolean) => {
+    if (addMember.isPending) return;
+    setOpen(next);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]" data-testid="modal-add-member">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold text-gray-900">
-              Agregar Nuevo Socio
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              data-testid="button-close-modal"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle>Agregar nuevo socio</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <form onSubmit={form.handleSubmit(submit)} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="nombre"
@@ -83,17 +73,12 @@ export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddM
                   <FormItem>
                     <FormLabel>Nombre</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Ingrese el nombre"
-                        data-testid="input-first-name"
-                      />
+                      <Input {...field} placeholder="Vincet" data-testid="input-first-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="apellido"
@@ -101,11 +86,7 @@ export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddM
                   <FormItem>
                     <FormLabel>Apellido</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Ingrese el apellido"
-                        data-testid="input-last-name"
-                      />
+                      <Input {...field} placeholder="Vangogh" data-testid="input-last-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -120,12 +101,7 @@ export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddM
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
-                      {...field}
-                      type="email"
-                      placeholder="socio@email.com"
-                      data-testid="input-email"
-                    />
+                    <Input type="email" {...field} placeholder="socio@email.com" data-testid="input-email" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -137,14 +113,14 @@ export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddM
               name="puntos"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Puntos Iniciales</FormLabel>
+                  <FormLabel>Puntos iniciales</FormLabel>
                   <FormControl>
                     <Input
-                      {...field}
                       type="number"
-                      min="0"
-                      placeholder="0"
+                      min={0}
+                      value={field.value ?? 0}
                       onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      placeholder="0"
                       data-testid="input-initial-points"
                     />
                   </FormControl>
@@ -153,29 +129,25 @@ export function AddMemberModal({ isOpen, onClose, onAddMember, isLoading }: AddM
               )}
             />
 
-            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleClose}
-                disabled={isLoading}
+                onClick={() => setOpen(false)}
+                disabled={addMember.isPending}
                 data-testid="button-cancel"
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={isLoading}
-                data-testid="button-submit-member"
-              >
-                {isLoading ? (
+              <Button type="submit" disabled={addMember.isPending} data-testid="button-submit-member">
+                {addMember.isPending ? (
                   <LoadingSpinner className="mr-2" />
                 ) : (
                   <Plus className="mr-2 h-4 w-4" />
                 )}
-                Agregar Socio
+                Agregar socio
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </Form>
       </DialogContent>

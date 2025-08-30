@@ -1,17 +1,15 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { 
-  LayoutDashboard, 
-  Users, 
-  UserPlus, 
-  BarChart3 
-} from "lucide-react";
+import { LayoutDashboard, Users, BarChart3, ClipboardClock,List } from "lucide-react";
+
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Socios", href: "/members", icon: Users },
-  { name: "Agregar Socio", href: "/add-member", icon: UserPlus },
+  { name: "Listas", href: "/listas", icon: List },
   { name: "Reportes", href: "/reports", icon: BarChart3 },
+  { name: "Automations", href: "/automations", icon: ClipboardClock },
+
 ];
 
 export function Sidebar() {
