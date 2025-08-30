@@ -37,6 +37,7 @@ export default function HomePage() {
                 <Link to="/Sumate">
                   Unirme <ArrowRight className="h-4 w-4" />
                 </Link>
+               
               </Button>
               <Button asChild size="lg" variant="outline" className="gap-2 text-black ">
                 {/* Cambiá el destino si tenés login: to="/login" */}
@@ -68,6 +69,10 @@ export default function HomePage() {
       {/* Footer chiquito */}
       <footer className="py-8 text-center text-xs text-neutral-500">
         © {new Date().getFullYear()} Club Van Gogh — Todos los derechos reservados
+
+          <Link to="/dashboard">
+                  admin 
+                </Link>
       </footer>
     </div>
   );

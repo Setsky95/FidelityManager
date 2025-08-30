@@ -13,7 +13,7 @@ export default function SignIn() {
     try {
       setLoading(true);
       await signInWithGoogle();
-      navigate("/"); // al dashboard
+      navigate("/dashboard"); // al dashboard
     } catch (e) {
       console.error(e);
       alert("No se pudo iniciar sesión.");
