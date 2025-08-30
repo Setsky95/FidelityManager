@@ -1,53 +1,114 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, Timestamp } from "../_lib/firebase";
-import { getTemplateByKey, renderTemplate } from "../_lib/templates";
-import { sendEmail } from "../email";
+// api/public/register.ts
 import bcrypt from "bcryptjs";
+import { adminDb, Timestamp } from "../_lib/firebase";
+import { getTemplateByKey, renderTemplate } from "../_lib/templates"; // si los tenés ahí
+import { sendEmail } from "../_lib/email"; // no debe tirar la respuesta si falla
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") return res.status(405).end();
+// Helper: leer JSON del body en Vercel
+async function readJson(req: any) {
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(c as Buffer);
+  const raw = Buffer.concat(chunks).toString("utf8") || "{}";
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const e: any = new Error("Invalid JSON");
+    e.status = 400;
+    throw e;
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
 
   try {
-    const { nombre, apellido, email, password } = req.body ?? {};
-    if (!nombre?.trim() || !apellido?.trim() || !email?.includes("@") || typeof password !== "string" || password.length < 8)
-      return res.status(400).json({ ok: false, error: "Datos inválidos" });
+    const { nombre, apellido, email, password } = await readJson(req);
 
-    const clean = { nombre: nombre.trim(), apellido: apellido.trim(), email: email.trim().toLowerCase() };
+    // Validación mínima
+    if (
+      !nombre || typeof nombre !== "string" || !nombre.trim() ||
+      !apellido || typeof apellido !== "string" || !apellido.trim() ||
+      !email || typeof email !== "string" || !email.includes("@") ||
+      !password || typeof password !== "string" || password.length < 8 || password.length > 72
+    ) {
+      res.status(400).json({ ok: false, error: "Datos inválidos" });
+      return;
+    }
+
+    const clean = {
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
+      email: email.trim().toLowerCase(),
+    };
+
     const passwordHash = await bcrypt.hash(password, 12);
 
     const result = await adminDb.runTransaction(async (tx) => {
+      // correlativo
       const seqRef = adminDb.doc("meta/sequences");
       const seqSnap = await tx.get(seqRef);
       const current = seqSnap.exists ? Number(seqSnap.data()?.membersNext || 1) : 1;
-      tx.set(seqRef, { membersNext: current + 1 }, { merge: true });
+      const next = current + 1;
+      tx.set(seqRef, { membersNext: next }, { merge: true });
 
-      const id = `VG${current}`;
+      // socio
+      const numero = current;
+      const id = `VG${numero}`;
       const now = Timestamp.now();
-
-      tx.set(adminDb.doc(`suscriptores/${id}`), {
-        id, numero: current, nombre: clean.nombre, apellido: clean.apellido, email: clean.email,
-        puntos: 0, passwordHash, fechaRegistro: now, ultimaActualizacion: now, ultimoMotivo: "Registro público",
+      const memberRef = adminDb.doc(`suscriptores/${id}`);
+      tx.set(memberRef, {
+        id,
+        numero,
+        nombre: clean.nombre,
+        apellido: clean.apellido,
+        email: clean.email,
+        puntos: 0,
+        passwordHash,
+        fechaRegistro: now,
+        ultimaActualizacion: now,
+        ultimoMotivo: "Registro público",
       });
 
+      // log
       const movRef = adminDb.collection("movimientos").doc();
       tx.set(movRef, {
-        memberId: id, memberIdNumber: current, memberName: `${clean.nombre} ${clean.apellido}`.trim(),
-        email: clean.email, type: "create", delta: 0, previousPoints: 0, newPoints: 0, reason: "Registro público", createdAt: now,
+        memberId: id,
+        memberIdNumber: numero,
+        memberName: `${clean.nombre} ${clean.apellido}`.trim(),
+        email: clean.email,
+        type: "create",
+        delta: 0,
+        previousPoints: 0,
+        newPoints: 0,
+        reason: "Registro público",
+        createdAt: now,
       });
 
-      return { id, numero: current, nombre: clean.nombre, apellido: clean.apellido, email: clean.email };
+      return { id, numero, nombre: clean.nombre, apellido: clean.apellido, email: clean.email };
     });
 
-    try {
-      const tpl = await getTemplateByKey("welcome");
-      if (tpl.enabled) {
-        const ctx = { nombre: result.nombre, apellido: result.apellido, email: result.email, id: result.id, puntos: 0, delta: 0 };
-        await sendEmail({ to: result.email, subject: renderTemplate(tpl.subject, ctx), html: renderTemplate(tpl.body, ctx), from: tpl.from });
+    // Email de bienvenida (no bloqueante)
+    (async () => {
+      try {
+        const tpl = await getTemplateByKey("welcome");
+        if (tpl?.enabled !== false) {
+          const ctx = { ...result, puntos: 0, delta: 0 };
+          const subject = renderTemplate(tpl.subject || "¡Bienvenido/a, {{nombre}}!", ctx);
+          const html = renderTemplate(tpl.body || "<p>Hola {{nombre}}</p>", ctx);
+          await sendEmail({ to: result.email, subject, html, from: tpl.from });
+        }
+      } catch (e) {
+        console.warn("[welcome email] fallo no bloqueante:", e);
       }
-    } catch {}
+    })().catch(() => { /* no-op */ });
 
-    return res.status(201).json({ ok: true, member: result });
+    res.status(201).json({ ok: true, member: result });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "Error al registrar" });
+    console.error("[/api/public/register] error:", e);
+    const status = e?.status || 500;
+    res.status(status).json({ ok: false, error: e?.message || "Server error" });
   }
 }

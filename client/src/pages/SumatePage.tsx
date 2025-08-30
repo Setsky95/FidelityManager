@@ -20,26 +20,49 @@ export default function SumatePage() {
     defaultValues: { nombre: "", apellido: "", email: "", password: "" }, // 👈 incluye password
     mode: "onChange",
   });
+const onSubmit = async (data: PublicRegister) => {
+  setLoading(true);
+  setSuccess(null);
+  try {
+    const res = await fetch("/api/public/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data), // incluye password
+    });
 
-  const onSubmit = async (data: PublicRegister) => {
-    setLoading(true); setSuccess(null);
-    try {
-      const res = await fetch("/api/public/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data), // 👈 ahora viaja password
-      });
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : null;
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      setSuccess({ id: json.member.id, nombre: json.member.nombre });
-      form.reset({ nombre: "", apellido: "", email: "", password: "" });
-    } catch (e: any) {
-      alert(e?.message ?? "Error al registrar");
-    } finally {
-      setLoading(false);
+    const ct = res.headers.get("content-type") || "";
+    let json: any = null;
+    let text: string | null = null;
+
+    if (ct.includes("application/json")) {
+      try {
+        json = await res.json();
+      } catch {
+        /* cae a texto abajo si hiciera falta */
+      }
     }
-  };
+    if (!json) {
+      text = await res.text();
+      try { json = text ? JSON.parse(text) : null; } catch { /* no es JSON */ }
+    }
+
+    if (!res.ok || !json?.ok) {
+      const msg =
+        (json && (json.error || json.message)) ||
+        (text && text.slice(0, 300)) ||
+        `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    setSuccess({ id: json.member.id, nombre: json.member.nombre });
+    form.reset({ nombre: "", apellido: "", email: "", password: "" });
+  } catch (e: any) {
+    alert(e?.message ?? "Error al registrar");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen grid place-items-center bg-neutral-900 p-6 text-white">
