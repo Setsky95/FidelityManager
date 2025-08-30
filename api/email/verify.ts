@@ -1,4 +1,4 @@
-import { transporter } from "../_lib/email";
+import { sendEmail, transporter } from "../_lib/email.js";
 
 export default async function handler(_req: any, res: any) {
   try {

@@ -1,5 +1,6 @@
 // api/public/register.ts
-import { adminDb } from "../_lib/firebase";
+import { adminDb } from "../_lib/firebase.js";
+import { sendEmail } from "../_lib/email.js";
 import bcrypt from "bcryptjs";
 
 function bad(res: any, code: number, msg: string) {

@@ -1,4 +1,5 @@
-import { sendEmail } from "../_lib/email";
+import { sendEmail } from "../_lib/email.js";
+import { adminDb } from "../_lib/firebase.js"; // si lo usás
 
 export default async function handler(req: any, res: any) {
   try {
