@@ -13,12 +13,13 @@ import { Sidebar } from "@/components/sidebar";
 import Dashboard from "@/pages/dashboard";
 import Members from "@/pages/members";
 import Reports from "@/pages/reports";
-import SignIn from "@/pages/sign-in";
-import Automations from "./pages/automations";
-import SumatePage from "./pages/SumatePage";
-import Listas from "./pages/lists";
-import HomePage from "./pages/homePage"; // 👈 renombrá el componente exportado a HomePage
-import LoginPage from "./pages/loginPage";
+import SignIn from "@/pages/sign-in";       // <- si querés mantener esta ruta pública
+import NotFound from "@/pages/not-found";   // <- usalo como 404
+import Automations from "@/pages/automations";
+import SumatePage from "@/pages/SumatePage";
+import Listas from "@/pages/lists";
+import HomePage from "@/pages/homePage";    // <- asegurate que exporte `default function HomePage() { ... }`
+import LoginPage from "@/pages/loginPage";
 
 function ProtectedArea() {
   return (
@@ -31,6 +32,7 @@ function ProtectedArea() {
           <Route path="/reports" component={Reports} />
           <Route path="/automations" component={Automations} />
           <Route path="/listas" component={Listas} />
+          <Route component={NotFound} />
         </Switch>
       </div>
     </div>
@@ -41,22 +43,23 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {/* ✅ AuthProvider envuelve todas las rutas para que el contexto esté disponible */}
         <AuthProvider>
           <Switch>
             {/* Públicas */}
             <Route path="/login" component={LoginPage} />
-            <Route path="/" component={HomePage} />
+            <Route path="/sign-in" component={SignIn} />   {/* opcional; podés borrar si no lo usás */}
             <Route path="/sumate" component={SumatePage} />
-                      <Route component={SignIn} />
+            <Route path="/" component={HomePage} />
 
-
-            {/* Protegidas */}
+            {/* Protegidas: catch-all después de las públicas */}
             <Route>
               <PrivateRoute>
                 <ProtectedArea />
               </PrivateRoute>
             </Route>
+
+            {/* 404 final */}
+            <Route component={NotFound} />
           </Switch>
 
           <Toaster />
