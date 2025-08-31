@@ -11,12 +11,15 @@ import { transporter, sendEmail } from "./email.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+// -----------------------------------------------------------------------------
+// Config archivo automations.JSON (opcional, fallback)
+// -----------------------------------------------------------------------------
 const AUTOMATIONS_FILE =
   process.env.AUTOMATIONS_FILE_PATH || path.join(process.cwd(), "automations.JSON");
 
-// -----------------------------
+// -----------------------------------------------------------------------------
 // Helpers
-// -----------------------------
+// -----------------------------------------------------------------------------
 function renderTemplate(tpl: string, vars: Record<string, any>) {
   return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) =>
     (vars?.[k] ?? "").toString()
@@ -46,7 +49,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES = process.env.JWT_EXPIRES || "7d";
 
 function signSession(u: SessionUser) {
-  return jwt.sign(u, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  return jwt.sign(u, JWT_SECRET, { expiresIn: JWT_EXPIRES as any });
 }
 
 function cookieOpts() {
@@ -54,7 +57,7 @@ function cookieOpts() {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: isProd,  // en prod por HTTPS
+    secure: isProd, // en prod por HTTPS
     path: "/",
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 días
   };
@@ -73,6 +76,18 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+/** Lee settings/automations de Firestore (o {}) */
+async function readAutomationsSettingsFromFirestore(): Promise<any> {
+  try {
+    const ref = adminDb.doc("settings/automations");
+    const snap = await ref.get();
+    return snap.exists ? (snap.data() || {}) : {};
+  } catch (e) {
+    console.warn("[automations settings] Firestore fallo:", e);
+    return {};
+  }
+}
+
 /**
  * Busca una plantilla por clave:
  * 1) Firestore: settings/automations
@@ -84,19 +99,15 @@ async function getTemplateByKey(
 ): Promise<{ from: string; subject: string; body: string; enabled?: boolean }> {
   // 1) Firestore
   try {
-    const ref = adminDb.doc("settings/automations");
-    const snap = await ref.get();
-    if (snap.exists) {
-      const data: any = snap.data() || {};
-      const candidate = data[key] || data[`${key}Email`];
-      if (candidate?.subject || candidate?.body) {
-        return {
-          from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
-          subject: candidate.subject || "",
-          body: candidate.body || "",
-          enabled: candidate.enabled,
-        };
-      }
+    const data = await readAutomationsSettingsFromFirestore();
+    const candidate = data[key] || data[`${key}Email`];
+    if (candidate?.subject || candidate?.body) {
+      return {
+        from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
+        subject: candidate.subject || "",
+        body: candidate.body || "",
+        enabled: candidate.enabled,
+      };
     }
   } catch (e) {
     console.warn("[getTemplateByKey] Firestore fallo:", e);
@@ -123,9 +134,25 @@ async function getTemplateByKey(
   };
 }
 
-/**
- * Registro de rutas de la API
- */
+/** Devuelve {enabled, threshold, tpl} para levelUp (o null si no aplica) */
+async function getLevelUpConfig() {
+  const data = await readAutomationsSettingsFromFirestore();
+  const cfg = data.levelUpEmail || data.levelUp;
+  if (!cfg) return null;
+
+  const threshold = Number(cfg.threshold);
+  const enabled = cfg.enabled !== false;
+  if (!enabled || !Number.isFinite(threshold) || threshold <= 0) return null;
+
+  const tpl = await getTemplateByKey("levelUp"); // admite levelUp o levelUpEmail
+  if (tpl.enabled === false) return null;
+
+  return { enabled, threshold, tpl };
+}
+
+// -----------------------------------------------------------------------------
+// Registro de rutas
+// -----------------------------------------------------------------------------
 export default async function registerRoutes(app: Express) {
   /* =========================================================
    *  PUBLIC: /api/public/register
@@ -479,7 +506,112 @@ export default async function registerRoutes(app: Express) {
     }
   });
 
-  // === ADMIN: crear socio (opcionalmente con puntos y/o password) ===
+  /* =========================================================
+   *  NUEVO: SUMAR PUNTOS DESDE EL SERVER (dispara emails)
+   * ======================================================= */
+  app.post("/api/members/:id/points/add", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, reason } = req.body ?? {};
+      const delta = Number(amount || 0);
+
+      if (!id || !Number.isFinite(delta) || delta <= 0) {
+        return res.status(400).json({ ok: false, error: "Parámetros inválidos" });
+      }
+
+      const result = await adminDb.runTransaction(async (tx) => {
+        const ref = adminDb.doc(`suscriptores/${id}`);
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new Error("Socio no existe");
+
+        const data = snap.data() as any;
+        const prev = Number(data.puntos || 0);
+        const now = Timestamp.now();
+        const newPoints = prev + delta;
+
+        tx.set(ref, {
+          puntos: newPoints,
+          ultimaActualizacion: now,
+          ultimoMotivo: reason || "Carga rápida",
+        }, { merge: true });
+
+        const movRef = adminDb.collection("movimientos").doc();
+        tx.set(movRef, {
+          memberId: id,
+          memberIdNumber: data.numero,
+          memberName: `${data.nombre} ${data.apellido}`.trim(),
+          email: data.email,
+          type: "add",
+          delta,
+          previousPoints: prev,
+          newPoints,
+          reason: reason || "Carga rápida",
+          createdAt: now,
+        });
+
+        return {
+          id,
+          numero: data.numero,
+          nombre: data.nombre,
+          apellido: data.apellido,
+          email: data.email,
+          prev,
+          newPoints,
+          delta,
+        };
+      });
+
+      // 🔔 Email pointsAdd
+      try {
+        const tpl = await getTemplateByKey("pointsAdd");
+        if (tpl.enabled !== false && result.delta > 0) {
+          const data = {
+            nombre: result.nombre,
+            apellido: result.apellido,
+            email: result.email,
+            id: result.id,
+            puntos: result.newPoints,
+            delta: result.delta,
+          };
+          const subject = renderTemplate(tpl.subject, data);
+          const html = renderTemplate(tpl.body, data);
+          await sendEmail({ to: result.email, subject, html, from: tpl.from });
+        }
+      } catch (e) {
+        console.warn("[points-add email] fallo no bloqueante:", e);
+      }
+
+      // 🔔 Email levelUp (si cruza umbral)
+      try {
+        const cfg = await getLevelUpConfig(); // {enabled, threshold, tpl}
+        if (cfg && result.prev < cfg.threshold && result.newPoints >= cfg.threshold) {
+          const data = {
+            nombre: result.nombre,
+            apellido: result.apellido,
+            email: result.email,
+            id: result.id,
+            puntos: result.newPoints,
+            threshold: cfg.threshold,
+            delta: result.delta,
+          };
+          const subject = renderTemplate(cfg.tpl.subject, data);
+          const html = renderTemplate(cfg.tpl.body, data);
+          await sendEmail({ to: result.email, subject, html, from: cfg.tpl.from });
+        }
+      } catch (e) {
+        console.warn("[level-up email] fallo no bloqueante:", e);
+      }
+
+      return res.json({ ok: true, newPoints: result.newPoints });
+    } catch (e: any) {
+      console.error("[/api/members/:id/points/add] error:", e);
+      return res.status(500).json({ ok: false, error: e?.message || "Error al sumar puntos" });
+    }
+  });
+
+  /* =========================================================
+   *  ADMIN: crear socio (opcionalmente con puntos y/o password)
+   * ======================================================= */
   app.post("/api/admin/members", /*requireAuth,*/ async (req, res) => {
     try {
       const { nombre, apellido, email, puntos, password } = req.body ?? {};

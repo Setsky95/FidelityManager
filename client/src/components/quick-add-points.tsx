@@ -1,21 +1,64 @@
 import { useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Coins, Plus, Search, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import type { Member } from "@shared/schema";
 
 type QuickAddPointsProps = {
   members: Member[];
+  /** Si lo pasás, se usa en vez del fetch al backend */
+  onAddPoints?: (memberId: string, amount: number) => Promise<void> | void;
+  /** Forzás estado de envío desde afuera (opcional) */
   isSubmitting?: boolean;
-  onAddPoints: (memberId: string, amount: number) => Promise<void> | void;
 };
 
-export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddPointsProps) {
+export function QuickAddPoints({
+  members,
+  onAddPoints,
+  isSubmitting,
+}: QuickAddPointsProps) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
   const [amount, setAmount] = useState<number>(1);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Mutación por defecto -> POST /api/members/points
+  const addPointsMutation = useMutation({
+    mutationFn: async ({ id, delta, reason }: { id: string; delta: number; reason?: string }) => {
+      const res = await fetch("/api/members/points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, delta, reason }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      return json;
+    },
+    onSuccess: () => {
+      // refrescamos listas / stats
+      queryClient.invalidateQueries({ queryKey: ["/api/members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({
+        title: "Éxito",
+        description: "Puntos agregados. Si correspondía, se envió el email al socio.",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Error",
+        description: String(err?.message || err),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const pending = isSubmitting ?? addPointsMutation.isPending;
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -49,8 +92,20 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
   };
 
   const handleAdd = async () => {
-    if (!selected || amount <= 0) return;
-    await onAddPoints(selected.id, amount);
+    if (!selected || amount <= 0 || pending) return;
+
+    if (onAddPoints) {
+      // modo “legacy/custom”
+      await onAddPoints(selected.id, amount);
+    } else {
+      // nuevo flujo: pega al backend y dispara email
+      await addPointsMutation.mutateAsync({
+        id: selected.id,
+        delta: amount,
+        reason: "Carga rápida",
+      });
+    }
+
     setAmount(1);
   };
 
@@ -61,7 +116,7 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
           Sumar Puntos
         </h3>
 
-        {/* Fila fija: buscador | cantidad | botón */}
+        {/* Fila: buscador | cantidad | botón */}
         <div className="grid gap-3 items-center md:grid-cols-[minmax(0,1fr)_140px_180px]">
           {/* Buscador + resultados */}
           <div className="relative">
@@ -77,7 +132,6 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
 
-            {/* Dropdown de resultados (no altera el alto de la fila) */}
             {query && results.length > 0 && (
               <div className="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-hidden">
                 {results.map((m) => (
@@ -89,7 +143,8 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
                     data-testid={`quickadd-result-${m.id}`}
                   >
                     <div className="text-sm font-medium text-gray-900">
-                      {m.nombre} {m.apellido} <span className="text-gray-400">· {m.id}</span>
+                      {m.nombre} {m.apellido}{" "}
+                      <span className="text-gray-400">· {m.id}</span>
                     </div>
                     <div className="text-xs text-gray-500">{m.email}</div>
                   </button>
@@ -100,13 +155,14 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
 
           {/* Cantidad */}
           <div className="flex flex-col">
-           
             <Input
               id="quickadd-amount"
               type="number"
               min={1}
               value={amount}
-              onChange={(e) => setAmount(Math.max(1, parseInt(e.target.value || "1", 10)))}
+              onChange={(e) =>
+                setAmount(Math.max(1, parseInt(e.target.value || "1", 10)))
+              }
               className="h-10 text-right"
               data-testid="quickadd-amount"
             />
@@ -117,16 +173,16 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
             <Button
               className="w-full h-10"
               onClick={handleAdd}
-              disabled={!selected || amount <= 0 || isSubmitting}
+              disabled={!selected || amount <= 0 || pending}
               data-testid="quickadd-submit"
             >
               <Plus className="mr-2 h-4 w-4" />
-              Agregar Puntos
+              {pending ? "Agregando..." : "Agregar Puntos"}
             </Button>
           </div>
         </div>
 
-        {/* Fila aparte: seleccionado (no mueve la fila superior) */}
+        {/* Seleccionado */}
         {selected && !query && (
           <div
             className="mt-2 text-sm text-gray-600 flex items-center gap-2"
@@ -137,7 +193,8 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
               <span className="font-medium text-gray-900">
                 {selected.nombre} {selected.apellido}
               </span>{" "}
-              <span className="text-gray-400">({selected.id})</span> — {selected.email}
+              <span className="text-gray-400">({selected.id})</span> —{" "}
+              {selected.email}
             </div>
             <Button
               type="button"
@@ -151,8 +208,6 @@ export function QuickAddPoints({ members, isSubmitting, onAddPoints }: QuickAddP
             </Button>
           </div>
         )}
-
-       
       </CardContent>
     </Card>
   );

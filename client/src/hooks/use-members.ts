@@ -1,9 +1,10 @@
+// client/src/hooks/use-members.ts
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FirebaseService } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { InsertMember, UpdatePoints } from "@shared/schema";
 
-// Minimal para lookup local
+// Tip mínimo para lookup local
 type MemberRec = {
   id: string;
   nombre: string;
@@ -24,7 +25,10 @@ async function postJSON<T = any>(url: string, body: any): Promise<T> {
   const json = text ? JSON.parse(text) : null;
   if (!res.ok || json?.ok === false) {
     const msg = json?.error || json?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
+    // adjunto status por si queremos diferenciar 404
+    const err = new Error(msg) as any;
+    (err.status = res.status);
+    throw err;
   }
   return json as T;
 }
@@ -33,18 +37,15 @@ export function useMembers() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // 🔎 Listado de miembros (seguimos usando tu fuente actual)
+  // 🔎 Listado
   const { data: members = [], isLoading } = useQuery<MemberRec[]>({
     queryKey: ["/api/members"],
     queryFn: FirebaseService.getMembers,
   });
 
-  // ➕ Alta de socio (ADMIN) => ahora pasa por el BACKEND para disparar automations
+  // ➕ Alta (ADMIN) → backend dispara emails
   const addMember = useMutation({
-    // payload que llega desde AddMemberModal
     mutationFn: async (payload: InsertMember) => {
-      // El server crea VG{n}, logs y manda emails (welcome + pointsAdd si puntos>0)
-      // Endpoint agregado en routes.mts: POST /api/admin/members
       const resp = await postJSON<{ ok: true; member: MemberRec }>(
         "/api/admin/members",
         {
@@ -59,10 +60,7 @@ export function useMembers() {
     onSuccess: (member) => {
       queryClient.invalidateQueries({ queryKey: ["/api/members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({
-        title: "Éxito",
-        description: `Socio creado: ${member.id}`,
-      });
+      toast({ title: "Éxito", description: `Socio creado: ${member.id}` });
     },
     onError: (error: any) => {
       toast({
@@ -74,57 +72,104 @@ export function useMembers() {
     },
   });
 
-  // 🔄 Actualización de puntos
-  // Mantengo tu operación en Firebase, y SI el delta es positivo,
-  // disparo /api/automations/points-add con los datos del miembro.
+  // 🔄 Sumar puntos con backend → fallback a client + automation
+  type NewShape = { memberId: string; amount: number; reason?: string };
+  type OldShape = {
+    memberId: string;
+    currentPoints: number;
+    update: UpdatePoints; // { operation: 'add' | 'set' | 'subtract', amount, reason? }
+  };
+
   const updatePoints = useMutation({
-    mutationFn: async ({
-      memberId,
-      currentPoints,
-      update,
-    }: {
-      memberId: string;
-      currentPoints: number;
-      update: UpdatePoints;
-    }) => {
-      // 1) Hacé lo de siempre (transacción en Firebase)
-      const result = await FirebaseService.updateMemberPoints(
-        memberId,
-        currentPoints,
-        update
-      );
+    mutationFn: async (args: NewShape | OldShape) => {
+      // Normalizo parámetros
+      let memberId: string;
+      let amount = 0;
+      let reason: string | undefined;
+      let currentPointsFromCaller: number | undefined;
 
-      // 2) Intento inferir un "delta" positivo para notificar
-      //    (soporta varias formas comunes de payload)
-      const deltaFromUpdate =
-        // @ts-ignore — intentamos soportar formas típicas
-        update?.delta ??
-        // @ts-ignore
-        update?.amount ??
-        // @ts-ignore
-        update?.add ??
-        0;
+      if ("amount" in args) {
+        // firma nueva
+        memberId = args.memberId;
+        amount = Number(args.amount || 0);
+        reason = args.reason;
+      } else {
+        // firma vieja
+        memberId = args.memberId;
+        currentPointsFromCaller = Number(args.currentPoints ?? NaN);
+        const op = (args.update as any)?.operation;
+        const a =
+          (args.update as any)?.amount ??
+          (args.update as any)?.delta ??
+          (args.update as any)?.add ??
+          0;
+        // Sólo disparamos "pointsAdd" si es suma positiva
+        amount = op === "subtract" ? 0 : Number(a || 0);
+        reason = (args.update as any)?.reason;
+      }
 
-      const delta = Number.isFinite(deltaFromUpdate)
-        ? Number(deltaFromUpdate)
-        : 0;
+      // Si no hay suma positiva, hacemos sólo la operación local y listo
+      if (!(amount > 0)) {
+        // Mantengo compat: si venía en flujo viejo, seguimos tocando Firebase directo
+        if (!("amount" in args)) {
+          return FirebaseService.updateMemberPoints(
+            memberId,
+            currentPointsFromCaller!,
+            (args as OldShape).update
+          );
+        }
+        // Si venía en la firma nueva pero amount <= 0, no hacemos nada
+        throw new Error("La cantidad debe ser mayor a 0");
+      }
 
-      if (delta > 0) {
-        // Buscar datos del miembro en la caché
+      // 1) Intento por backend (route server ideal)
+      try {
+        const r = await fetch(`/api/members/${memberId}/points/add`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount, reason }),
+        });
+        const text = await r.text();
+        const json = text ? JSON.parse(text) : null;
+
+        if (r.status === 404) {
+          // No existe la ruta -> fallback
+          throw Object.assign(new Error("NO_SERVER_ENDPOINT"), { code: "NO_SERVER_ENDPOINT" });
+        }
+        if (!r.ok || json?.ok === false) {
+          const msg = json?.error || json?.message || `HTTP ${r.status}`;
+          throw new Error(msg);
+        }
+        // { ok: true, newPoints?: number }
+        return json;
+      } catch (err: any) {
+        if (err?.code !== "NO_SERVER_ENDPOINT") throw err;
+
+        // 2) Fallback: flujo anterior (cliente) + automation
+        // 2.1. Actualizo en Firebase
+        //    - si estamos en firma nueva, necesito currentPoints local
         const member: MemberRec | undefined = (members as MemberRec[]).find(
           (m) => m.id === memberId
         );
+        const current =
+          typeof currentPointsFromCaller === "number"
+            ? currentPointsFromCaller
+            : Number(member?.puntos || 0);
 
-        // Calcular total estimado (si el servicio ya retorna el nuevo total, usalo)
-        const newPoints =
-          typeof (result as any)?.newPoints === "number"
-            ? (result as any).newPoints
-            : currentPoints + delta;
+        const result = await FirebaseService.updateMemberPoints(memberId, current, {
+          operation: "add",
+          amount,
+          reason: reason || "Carga rápida",
+        } as any);
 
-        if (member?.email) {
-          // 3) Disparo de automation (server compila plantilla y envía)
-          //    Si tenés la plantilla 'pointsAdd' en Firestore/archivo, el server la usa.
-          try {
+        // 2.2. Disparo email (no bloqueante)
+        try {
+          if (member?.email) {
+            const newPoints =
+              typeof (result as any)?.newPoints === "number"
+                ? (result as any).newPoints
+                : current + amount;
+
             await postJSON("/api/automations/points-add", {
               to: member.email,
               data: {
@@ -133,31 +178,22 @@ export function useMembers() {
                 email: member.email,
                 id: member.id,
                 puntos: newPoints,
-                delta,
+                delta: amount,
               },
             });
-          } catch (e) {
-            // No bloqueamos el flujo por el mail — avisamos en consola/Toast suave
-            console.warn("[points-add email] no se pudo enviar:", e);
-            toast({
-              title: "Aviso",
-              description:
-                "Puntos actualizados. No se pudo enviar el email de notificación.",
-              duration: 3500,
-            });
           }
+        } catch (e) {
+          console.warn("[points-add email] fallback no se pudo enviar:", e);
+          // aviso suave, sin romper el flujo
         }
-      }
 
-      return result;
+        return result;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({
-        title: "Éxito",
-        description: "Puntos actualizados correctamente",
-      });
+      toast({ title: "Éxito", description: "Puntos actualizados correctamente" });
     },
     onError: (error: any) => {
       toast({
@@ -169,16 +205,13 @@ export function useMembers() {
     },
   });
 
-  // 🗑️ Eliminación (dejamos como lo tenías)
+  // 🗑️ Eliminar
   const deleteMember = useMutation({
     mutationFn: FirebaseService.deleteMember,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({
-        title: "Éxito",
-        description: "Socio eliminado correctamente",
-      });
+      toast({ title: "Éxito", description: "Socio eliminado correctamente" });
     },
     onError: (error) => {
       toast({
@@ -186,15 +219,9 @@ export function useMembers() {
         description: "Error al eliminar el socio",
         variant: "destructive",
       });
-      console.error("Error deleting points:", error);
+      console.error("Error deleting member:", error);
     },
   });
 
-  return {
-    members,
-    isLoading,
-    addMember,
-    updatePoints,
-    deleteMember,
-  };
+  return { members, isLoading, addMember, updatePoints, deleteMember };
 }

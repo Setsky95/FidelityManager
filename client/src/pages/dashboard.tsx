@@ -86,19 +86,8 @@ export default function Dashboard() {
           <StatsCards stats={stats} isLoading={statsLoading} />
 
           
-<QuickAddPoints
-  members={members}
-  isSubmitting={updatePoints.isPending}
-  onAddPoints={async (memberId, amount) => {
-    const m = members.find((x) => x.id === memberId);
-    if (!m) return;
-    await updatePoints.mutateAsync({
-      memberId,
-      currentPoints: m.puntos,
-      update: { operation: "add", amount, reason: "Carga rápida" },
-    });
-  }}
-/>
+<QuickAddPoints members={members} />
+
           {/* Members Management Section */}
           <MembersTable
             members={members}
