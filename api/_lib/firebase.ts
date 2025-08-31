@@ -1,34 +1,70 @@
- // api/_lib/firebase.ts
-import admin from "firebase-admin";
+// api/_lib/firebase.ts
+import * as admin from "firebase-admin";
 
-function loadServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON faltante");
+// ---------- helpers ----------
+function getProjectIdFromEnv(): string | undefined {
   try {
-    // Acepta tanto con \n escapados como multilínea
-    const json = JSON.parse(raw);
-    if (typeof json.private_key === "string") {
-      json.private_key = json.private_key.replace(/\\n/g, "\n");
-    }
-    return json;
-  } catch (e: any) {
-    // Si vino multilínea válida pero falló por alguna razón, reintento simple
-    const fixed = raw.replace(/\\n/g, "\n");
-    return JSON.parse(fixed);
-  }
+    if (process.env.FIREBASE_ADMIN_PROJECT_ID) return process.env.FIREBASE_ADMIN_PROJECT_ID;
+    if (process.env.GOOGLE_CLOUD_PROJECT) return process.env.GOOGLE_CLOUD_PROJECT;
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    if (raw) return JSON.parse(raw).project_id as string | undefined;
+  } catch {/* ignore */}
+  return undefined;
 }
 
-// Evita re-inicializar en caliente (capa global de la función)
-const app =
-  admin.apps.length > 0
-    ? admin.app()
-    : admin.initializeApp({
-        credential: admin.credential.cert(loadServiceAccount() as any),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ||
-          JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "{}")
-            .project_id,
-      });
+function getServiceAccountFromEnv():
+  | (admin.ServiceAccount & { private_key?: string })
+  | undefined {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return undefined;
 
-export const adminDb = admin.firestore(app);
+  // soporta \n escapados
+  const parsed = JSON.parse(raw);
+  if (typeof parsed.private_key === "string") {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+  }
+  return parsed as admin.ServiceAccount;
+}
+
+// ---------- single init (serverless-safe) ----------
+let app: admin.app.App | undefined;
+
+function initApp() {
+  if (app) return app;
+
+  const projectId = getProjectIdFromEnv();
+
+  try {
+    const sa = getServiceAccountFromEnv();
+    if (sa) {
+      app = admin.apps.length
+        ? admin.app()
+        : admin.initializeApp({
+            credential: admin.credential.cert(sa),
+            projectId: (sa as any).project_id || projectId,
+          });
+    } else {
+      // fallback si no hay JSON en env
+      app = admin.apps.length
+        ? admin.app()
+        : admin.initializeApp({
+            credential: admin.credential.applicationDefault(),
+            projectId,
+          });
+    }
+  } catch (e) {
+    console.error("[firebase] init failed:", e);
+    throw e;
+  }
+
+  return app;
+}
+
+// ---------- exports ----------
+const firebaseApp = initApp();
+
+export const adminDb = admin.firestore(firebaseApp);
 adminDb.settings({ ignoreUndefinedProperties: true });
+
+export const FieldValue = admin.firestore.FieldValue;
+export const Timestamp = admin.firestore.Timestamp;

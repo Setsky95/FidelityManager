@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
-const LOADING_GIF = "http://imgfz.com/i/SzWgZeK.gif";
+const LOADING_GIF = "cargando...";
 
 export default function SumatePage() {
   const [success, setSuccess] = React.useState<{ id: string; nombre: string } | null>(null);

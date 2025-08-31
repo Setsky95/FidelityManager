@@ -23,7 +23,7 @@ import LoginPage from "@/pages/loginPage";
 
 function ProtectedArea() {
   return (
-    <div className="flex h-screen bg-surface" data-testid="app-layout">
+    <div className="flex h-screen bg-surface " data-testid="app-layout">
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Switch>
