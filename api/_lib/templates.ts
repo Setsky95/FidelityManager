@@ -1,6 +1,6 @@
-import { adminDb } from "./firebase";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { adminDb } from "./firebase";
 
 const AUTOMATIONS_FILE =
   process.env.AUTOMATIONS_FILE_PATH || path.join(process.cwd(), "automations.JSON");
@@ -9,17 +9,23 @@ export function renderTemplate(tpl: string, vars: Record<string, any>) {
   return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) => (vars?.[k] ?? "").toString());
 }
 
-async function readAutomationsFile() {
+async function readAutomationsFile(): Promise<any> {
   try {
     const raw = await fs.readFile(AUTOMATIONS_FILE, "utf-8");
     const text = raw.replace(/^\uFEFF/, "");
     return text.trim() ? JSON.parse(text) : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
-export async function getTemplateByKey(key: string) {
+export async function getTemplateByKey(key: string): Promise<{
+  from: string; subject: string; body: string; enabled?: boolean;
+}> {
+  // 1) Firestore settings/automations
   try {
-    const snap = await adminDb.doc("settings/automations").get();
+    const ref = adminDb.doc("settings/automations");
+    const snap = await ref.get();
     if (snap.exists) {
       const data: any = snap.data() || {};
       const candidate = data[key] || data[`${key}Email`];
@@ -28,11 +34,15 @@ export async function getTemplateByKey(key: string) {
           from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
           subject: candidate.subject || "",
           body: candidate.body || "",
-          enabled: candidate.enabled !== false,
+          enabled: candidate.enabled,
         };
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[getTemplateByKey] Firestore fallo:", e);
+  }
+
+  // 2) Archivo local
   const fileData = await readAutomationsFile();
   const candidate = fileData[key] || fileData[`${key}Email`];
   if (candidate?.subject || candidate?.body) {
@@ -40,9 +50,11 @@ export async function getTemplateByKey(key: string) {
       from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
       subject: candidate.subject || "",
       body: candidate.body || "",
-      enabled: candidate.enabled !== false,
+      enabled: candidate.enabled,
     };
   }
+
+  // 3) Fallback
   return {
     from: `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
     subject: `Notificación: ${key}`,

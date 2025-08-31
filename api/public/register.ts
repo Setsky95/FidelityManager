@@ -1,55 +1,42 @@
-// api/public/register.ts
-import { adminDb } from "../_lib/firebase.js";
-import { sendEmail } from "../_lib/email.js";
+import { Timestamp } from "firebase-admin/firestore";
 import bcrypt from "bcryptjs";
-
-function bad(res: any, code: number, msg: string) {
-  res.status(code).json({ ok: false, error: msg });
-}
+import { adminDb } from "../_lib/firebase";
+import { sendEmail } from "../_lib/email";
+import { getTemplateByKey, renderTemplate } from "../_lib/templates";
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") {
-    return bad(res, 405, "Method not allowed");
-  }
+  if (req.method !== "POST") return res.status(405).end();
 
   try {
-    const { nombre, apellido, email, password } = req.body || {};
-
-    if (
-      !nombre || typeof nombre !== "string" || !nombre.trim() ||
-      !apellido || typeof apellido !== "string" || !apellido.trim() ||
-      !email || typeof email !== "string" || !email.includes("@") ||
-      !password || typeof password !== "string" || password.length < 8 || password.length > 72
-    ) {
-      return bad(res, 400, "Datos inválidos");
+    const { nombre, apellido, email, password } = req.body ?? {};
+    if (!nombre || !apellido || !email || !password) {
+      return res.status(400).json({ ok: false, error: "Datos inválidos" });
+    }
+    if (typeof password !== "string" || password.length < 8 || password.length > 72) {
+      return res.status(400).json({ ok: false, error: "Password inválido" });
     }
 
     const clean = {
-      nombre: nombre.trim(),
-      apellido: apellido.trim(),
-      email: email.trim().toLowerCase(),
+      nombre: String(nombre).trim(),
+      apellido: String(apellido).trim(),
+      email: String(email).trim().toLowerCase(),
     };
-
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // === Transacción: generar secuencia y crear socio ===
     const result = await adminDb.runTransaction(async (tx) => {
       const seqRef = adminDb.doc("meta/sequences");
       const seqSnap = await tx.get(seqRef);
-      const current = seqSnap.exists
-        ? Number((seqSnap.data() as any)?.membersNext || 1)
-        : 1;
+      const current = seqSnap.exists ? Number(seqSnap.data()?.membersNext || 1) : 1;
       const next = current + 1;
       tx.set(seqRef, { membersNext: next }, { merge: true });
 
       const numero = current;
       const id = `VG${numero}`;
-      const now = new Date();
+      const now = Timestamp.now();
       const memberRef = adminDb.doc(`suscriptores/${id}`);
 
       tx.set(memberRef, {
-        id,
-        numero,
+        id, numero,
         nombre: clean.nombre,
         apellido: clean.apellido,
         email: clean.email,
@@ -77,14 +64,28 @@ export default async function handler(req: any, res: any) {
       return { id, numero, nombre: clean.nombre, apellido: clean.apellido, email: clean.email };
     });
 
-    // (Opcional) Si querés disparar el mail acá, hacelo try/catch y NO bloquees la respuesta.
-    // import { sendEmail } from "../_lib/email";  // si lo tenés
-    // sendEmail({ to: result.email, subject, html }).catch(e => console.warn("[welcome email]", e));
+    // 🔔 Welcome (no bloqueante)
+    (async () => {
+      try {
+        const tpl = await getTemplateByKey("welcome");
+        if (tpl.enabled !== false) {
+          const data = { ...result, puntos: 0, delta: 0 };
+          const subject = renderTemplate(tpl.subject, data);
+          const html    = renderTemplate(tpl.body, data);
+          console.log("[welcome] sending to", result.email);
+          await sendEmail({ to: result.email, subject, html, from: tpl.from });
+          console.log("[welcome] sent");
+        } else {
+          console.log("[welcome] template disabled");
+        }
+      } catch (e) {
+        console.warn("[welcome] error (non-blocking):", e);
+      }
+    })();
 
     return res.status(201).json({ ok: true, member: result });
   } catch (e: any) {
     console.error("[/api/public/register] error:", e);
-    // <<< Devuelve SIEMPRE JSON, así tu onSubmit lo muestra bien >>>
-    return bad(res, 500, e?.message || "Server error");
+    return res.status(500).json({ ok: false, error: e?.message || "Error al registrar" });
   }
 }

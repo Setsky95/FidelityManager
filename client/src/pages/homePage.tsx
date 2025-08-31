@@ -68,10 +68,10 @@ export default function HomePage() {
 
       {/* Footer chiquito */}
       <footer className="py-8 text-center text-xs text-neutral-500">
-        © {new Date().getFullYear()} Club Van Gogh — Todos los derechos reservados
+        © {new Date().getFullYear()} Club Van Gogh — Todos los derechos reservados 
 
           <Link to="/dashboard">
-                  admin 
+                  -  admin 
                 </Link>
       </footer>
     </div>
