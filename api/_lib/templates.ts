@@ -1,6 +1,6 @@
+import { adminDb } from "./firebase.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { adminDb } from "./firebase";
 
 const AUTOMATIONS_FILE =
   process.env.AUTOMATIONS_FILE_PATH || path.join(process.cwd(), "automations.JSON");
@@ -19,10 +19,8 @@ async function readAutomationsFile(): Promise<any> {
   }
 }
 
-export async function getTemplateByKey(key: string): Promise<{
-  from: string; subject: string; body: string; enabled?: boolean;
-}> {
-  // 1) Firestore settings/automations
+export async function getTemplateByKey(key: string) {
+  // 1) Firestore
   try {
     const ref = adminDb.doc("settings/automations");
     const snap = await ref.get();
@@ -34,7 +32,7 @@ export async function getTemplateByKey(key: string): Promise<{
           from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
           subject: candidate.subject || "",
           body: candidate.body || "",
-          enabled: candidate.enabled,
+          enabled: candidate.enabled !== false,
         };
       }
     }
@@ -42,7 +40,7 @@ export async function getTemplateByKey(key: string): Promise<{
     console.warn("[getTemplateByKey] Firestore fallo:", e);
   }
 
-  // 2) Archivo local
+  // 2) Archivo
   const fileData = await readAutomationsFile();
   const candidate = fileData[key] || fileData[`${key}Email`];
   if (candidate?.subject || candidate?.body) {
@@ -50,7 +48,7 @@ export async function getTemplateByKey(key: string): Promise<{
       from: candidate.from || `"Van Gogh Fidelidad" <${process.env.GMAIL_USER}>`,
       subject: candidate.subject || "",
       body: candidate.body || "",
-      enabled: candidate.enabled,
+      enabled: candidate.enabled !== false,
     };
   }
 

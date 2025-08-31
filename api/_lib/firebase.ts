@@ -1,5 +1,5 @@
 // api/_lib/firebase.ts
-import * as admin from "firebase-admin";
+import admin from "firebase-admin";
 
 // ---------- helpers ----------
 function getProjectIdFromEnv(): string | undefined {
@@ -7,8 +7,18 @@ function getProjectIdFromEnv(): string | undefined {
     if (process.env.FIREBASE_ADMIN_PROJECT_ID) return process.env.FIREBASE_ADMIN_PROJECT_ID;
     if (process.env.GOOGLE_CLOUD_PROJECT) return process.env.GOOGLE_CLOUD_PROJECT;
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (raw) return JSON.parse(raw).project_id as string | undefined;
-  } catch {/* ignore */}
+    if (raw) {
+      // podría venir en JSON o en base64 del JSON
+      try {
+        return JSON.parse(raw).project_id as string | undefined;
+      } catch {
+        const decoded = Buffer.from(raw, "base64").toString("utf8");
+        return JSON.parse(decoded).project_id as string | undefined;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   return undefined;
 }
 
@@ -18,8 +28,22 @@ function getServiceAccountFromEnv():
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return undefined;
 
-  // soporta \n escapados
-  const parsed = JSON.parse(raw);
+  // Puede venir:
+  // 1) JSON directo
+  // 2) JSON con \n escapados
+  // 3) Base64 del JSON (común en plataformas de deploy)
+  let text = raw;
+  try {
+    // si es base64 válido del JSON
+    const maybe = Buffer.from(raw, "base64").toString("utf8");
+    if (maybe.includes('"project_id"') && maybe.includes('"private_key"')) {
+      text = maybe;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const parsed = JSON.parse(text);
   if (typeof parsed.private_key === "string") {
     parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
   }
@@ -27,37 +51,43 @@ function getServiceAccountFromEnv():
 }
 
 // ---------- single init (serverless-safe) ----------
-let app: admin.app.App | undefined;
+// Reusar entre invocaciones en el mismo runtime
+const globalAny = globalThis as unknown as {
+  _vgFirebaseApp?: admin.app.App;
+};
 
 function initApp() {
-  if (app) return app;
+  if (globalAny._vgFirebaseApp) return globalAny._vgFirebaseApp;
 
   const projectId = getProjectIdFromEnv();
+  const sa = getServiceAccountFromEnv();
 
   try {
-    const sa = getServiceAccountFromEnv();
     if (sa) {
-      app = admin.apps.length
-        ? admin.app()
-        : admin.initializeApp({
-            credential: admin.credential.cert(sa),
-            projectId: (sa as any).project_id || projectId,
-          });
+      globalAny._vgFirebaseApp =
+        admin.apps.length > 0
+          ? admin.app()
+          : admin.initializeApp({
+              credential: admin.credential.cert(sa),
+              projectId: (sa as any).project_id || projectId,
+            });
     } else {
-      // fallback si no hay JSON en env
-      app = admin.apps.length
-        ? admin.app()
-        : admin.initializeApp({
-            credential: admin.credential.applicationDefault(),
-            projectId,
-          });
+      // Fallback: ADC (Application Default Credentials)
+      // Requiere que el entorno tenga un proyecto detectado.
+      globalAny._vgFirebaseApp =
+        admin.apps.length > 0
+          ? admin.app()
+          : admin.initializeApp({
+              credential: admin.credential.applicationDefault(),
+              projectId,
+            });
     }
   } catch (e) {
     console.error("[firebase] init failed:", e);
     throw e;
   }
 
-  return app;
+  return globalAny._vgFirebaseApp!;
 }
 
 // ---------- exports ----------
@@ -68,3 +98,4 @@ adminDb.settings({ ignoreUndefinedProperties: true });
 
 export const FieldValue = admin.firestore.FieldValue;
 export const Timestamp = admin.firestore.Timestamp;
+export const adminAuth = admin.auth(firebaseApp);
