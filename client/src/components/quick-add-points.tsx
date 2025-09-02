@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,9 +9,7 @@ import type { Member } from "@shared/schema";
 
 type QuickAddPointsProps = {
   members: Member[];
-  /** Si lo pasás, se usa en vez del fetch al backend */
   onAddPoints?: (memberId: string, amount: number) => Promise<void> | void;
-  /** Forzás estado de envío desde afuera (opcional) */
   isSubmitting?: boolean;
 };
 
@@ -20,6 +18,7 @@ export function QuickAddPoints({
   onAddPoints,
   isSubmitting,
 }: QuickAddPointsProps) {
+  const safeMembers = Array.isArray(members) ? members : [];
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
   const [amount, setAmount] = useState<number>(1);
@@ -28,9 +27,16 @@ export function QuickAddPoints({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Mutación por defecto -> POST /api/members/points
   const addPointsMutation = useMutation({
-    mutationFn: async ({ id, delta, reason }: { id: string; delta: number; reason?: string }) => {
+    mutationFn: async ({
+      id,
+      delta,
+      reason,
+    }: {
+      id: string;
+      delta: number;
+      reason?: string;
+    }) => {
       const res = await fetch("/api/members/points", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -41,7 +47,6 @@ export function QuickAddPoints({
       return json;
     },
     onSuccess: () => {
-      // refrescamos listas / stats
       queryClient.invalidateQueries({ queryKey: ["/api/members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
@@ -62,51 +67,70 @@ export function QuickAddPoints({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return members.slice(0, 6);
-    return members
+    if (!q) return safeMembers.slice(0, 6);
+    return safeMembers
       .filter((m) => {
+        const idStr = String(m.id).toLowerCase();
         const full = `${m.nombre} ${m.apellido}`.toLowerCase();
-        return (
-          m.id.toLowerCase().includes(q) ||
-          full.includes(q) ||
-          m.email.toLowerCase().includes(q)
-        );
+        return idStr.includes(q) || full.includes(q) || m.email.toLowerCase().includes(q);
       })
       .slice(0, 6);
-  }, [members, query]);
+  }, [safeMembers, query]);
 
   const selected = useMemo(
-    () => members.find((m) => m.id === selectedId) || null,
-    [members, selectedId]
+    () => safeMembers.find((m) => String(m.id) === selectedId) || null,
+    [safeMembers, selectedId]
   );
 
-  const handlePick = (id: string) => {
-    setSelectedId(id);
+  const handlePick = useCallback((id: string | number) => {
+    setSelectedId(String(id));
     setQuery("");
-  };
+  }, []);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setSelectedId("");
     setQuery("");
-    inputRef.current?.focus();
-  };
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
-  const handleAdd = async () => {
+  const handleAdd = useCallback(async () => {
     if (!selected || amount <= 0 || pending) return;
 
+    const delta = Number.isFinite(amount) ? amount : 1;
+
     if (onAddPoints) {
-      // modo “legacy/custom”
-      await onAddPoints(selected.id, amount);
+      await onAddPoints(String(selected.id), delta);
     } else {
-      // nuevo flujo: pega al backend y dispara email
       await addPointsMutation.mutateAsync({
-        id: selected.id,
-        delta: amount,
+        id: String(selected.id),
+        delta,
         reason: "Carga rápida",
       });
     }
 
     setAmount(1);
+    setSelectedId("");
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [selected, amount, pending, onAddPoints, addPointsMutation]);
+
+  const handleAmountChange = (v: string) => {
+    const n = parseInt(v, 10);
+    setAmount(Number.isFinite(n) && n > 0 ? n : 1);
+  };
+
+  const handleSearchKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!selected && results.length > 0) {
+        handlePick(results[0].id);
+      } else {
+        handleAdd();
+      }
+    }
+    if (e.key === "Escape") {
+      if (query) setQuery("");
+      else if (selectedId) handleClear();
+    }
   };
 
   return (
@@ -116,7 +140,7 @@ export function QuickAddPoints({
           Sumar Puntos
         </h3>
 
-        {/* Fila: buscador | cantidad | botón */}
+        {/* Buscador | cantidad | botón */}
         <div className="grid gap-3 items-center md:grid-cols-[minmax(0,1fr)_140px_180px]">
           {/* Buscador + resultados */}
           <div className="relative">
@@ -126,17 +150,19 @@ export function QuickAddPoints({
                 placeholder="Buscar por ID, nombre o email"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="pl-9 h-10"
                 data-testid="quickadd-search"
+                autoComplete="off"
               />
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
 
             {query && results.length > 0 && (
-              <div className="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-hidden">
+              <div className="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-auto max-h-64">
                 {results.map((m) => (
                   <button
-                    key={m.id}
+                    key={String(m.id)}
                     type="button"
                     onClick={() => handlePick(m.id)}
                     className="w-full text-left px-3 py-2 hover:bg-gray-50"
@@ -144,7 +170,7 @@ export function QuickAddPoints({
                   >
                     <div className="text-sm font-medium text-gray-900">
                       {m.nombre} {m.apellido}{" "}
-                      <span className="text-gray-400">· {m.id}</span>
+                      <span className="text-gray-400">· {String(m.id)}</span>
                     </div>
                     <div className="text-xs text-gray-500">{m.email}</div>
                   </button>
@@ -160,11 +186,11 @@ export function QuickAddPoints({
               type="number"
               min={1}
               value={amount}
-              onChange={(e) =>
-                setAmount(Math.max(1, parseInt(e.target.value || "1", 10)))
-              }
+              onChange={(e) => handleAmountChange(e.target.value)}
               className="h-10 text-right"
               data-testid="quickadd-amount"
+              inputMode="numeric"
+              pattern="[0-9]*"
             />
           </div>
 
@@ -193,7 +219,7 @@ export function QuickAddPoints({
               <span className="font-medium text-gray-900">
                 {selected.nombre} {selected.apellido}
               </span>{" "}
-              <span className="text-gray-400">({selected.id})</span> —{" "}
+              <span className="text-gray-400">({String(selected.id)})</span> —{" "}
               {selected.email}
             </div>
             <Button
