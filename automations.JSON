@@ -13,7 +13,7 @@
     "subject": "¡Sumaste {{delta}} puntos!",
     "body": "<p>Hola {{nombre}}, acabás de sumar <b>{{delta}}</b> puntos. Tu total ahora es <b>{{puntos}}</b>.</p>"
   },
-  "levelUpEmail": {
+  "pointsThresholdEmail": {
     "enabled": false,
     "to": "",
     "from": "sebapavlotsky@gmail.com",

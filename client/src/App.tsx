@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AuthProvider } from "@/providers/AuthProvider";
 import { PrivateRoute } from "@/components/PrivateRoute";
-
+import { BurgerMenu } from "./components/burgerMenu.jsx";
 import { Sidebar } from "@/components/sidebar";
 import Dashboard from "@/pages/dashboard";
 import Members from "@/pages/members";

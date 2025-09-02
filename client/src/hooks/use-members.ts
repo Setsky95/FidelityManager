@@ -25,7 +25,6 @@ async function postJSON<T = any>(url: string, body: any): Promise<T> {
   const json = text ? JSON.parse(text) : null;
   if (!res.ok || json?.ok === false) {
     const msg = json?.error || json?.message || `HTTP ${res.status}`;
-    // adjunto status por si queremos diferenciar 404
     const err = new Error(msg) as any;
     (err.status = res.status);
     throw err;
@@ -72,7 +71,7 @@ export function useMembers() {
     },
   });
 
-  // 🔄 Sumar puntos con backend → fallback a client + automation
+  // 🔄 Sumar puntos (prioriza endpoint serverless; fallback a flujo Firebase + mail pointsAdd)
   type NewShape = { memberId: string; amount: number; reason?: string };
   type OldShape = {
     memberId: string;
@@ -103,31 +102,28 @@ export function useMembers() {
           (args.update as any)?.delta ??
           (args.update as any)?.add ??
           0;
-        // Sólo disparamos "pointsAdd" si es suma positiva
-        amount = op === "subtract" ? 0 : Number(a || 0);
+        amount = op === "subtract" ? 0 : Number(a || 0); // sólo sumas positivas disparan server
         reason = (args.update as any)?.reason;
-      }
-
-      // Si no hay suma positiva, hacemos sólo la operación local y listo
-      if (!(amount > 0)) {
-        // Mantengo compat: si venía en flujo viejo, seguimos tocando Firebase directo
-        if (!("amount" in args)) {
+        // Si pidieron set/subtract, hacé el flujo viejo directo
+        if (op && op !== "add") {
           return FirebaseService.updateMemberPoints(
             memberId,
             currentPointsFromCaller!,
             (args as OldShape).update
           );
         }
-        // Si venía en la firma nueva pero amount <= 0, no hacemos nada
+      }
+
+      if (!(amount > 0)) {
         throw new Error("La cantidad debe ser mayor a 0");
       }
 
-      // 1) Intento por backend (route server ideal)
+      // 1) Endpoint ideal: dispara DB + emails (pointsAdd + threshold)
       try {
-        const r = await fetch(`/api/members/${memberId}/points/add`, {
+        const r = await fetch(`/api/members/points-add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount, reason }),
+          body: JSON.stringify({ memberId, amount, reason }),
         });
         const text = await r.text();
         const json = text ? JSON.parse(text) : null;
@@ -140,17 +136,16 @@ export function useMembers() {
           const msg = json?.error || json?.message || `HTTP ${r.status}`;
           throw new Error(msg);
         }
-        // { ok: true, newPoints?: number }
+        // { ok: true, newPoints, previousPoints, ... }
         return json;
       } catch (err: any) {
         if (err?.code !== "NO_SERVER_ENDPOINT") throw err;
 
-        // 2) Fallback: flujo anterior (cliente) + automation
-        // 2.1. Actualizo en Firebase
-        //    - si estamos en firma nueva, necesito currentPoints local
+        // 2) Fallback: flujo anterior (cliente) + intento de mail pointsAdd
         const member: MemberRec | undefined = (members as MemberRec[]).find(
           (m) => m.id === memberId
         );
+
         const current =
           typeof currentPointsFromCaller === "number"
             ? currentPointsFromCaller
@@ -162,7 +157,6 @@ export function useMembers() {
           reason: reason || "Carga rápida",
         } as any);
 
-        // 2.2. Disparo email (no bloqueante)
         try {
           if (member?.email) {
             const newPoints =

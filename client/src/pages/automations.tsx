@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useAutomations } from "@/hooks/use-automations";
 import { useToast } from "@/hooks/use-toast";
 import type { AutomationsSettingsFile } from "@/../shared/schema";
+import { BurgerMenu } from "@/components/burgerMenu.jsx";
 
 // === DEFAULTS ===
 const DEFAULTS: AutomationsSettingsFile = {
@@ -76,10 +77,12 @@ export default function AutomationsPage() {
   return (
     <div className="flex-1 overflow-y-auto bg-surface">
       <div className="p-6 space-y-6 max-w-5xl">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-1">
+          <BurgerMenu />
+
           <h2 className="text-2xl font-semibold">Automations</h2>
           <Button onClick={handleSave} disabled={save.isPending}>
-            {save.isPending ? "Guardando..." : "Guardar cambios"}
+            {save.isPending ? "Guardando..." : "Guardar"}
           </Button>
         </div>
 

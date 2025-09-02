@@ -7,23 +7,24 @@ import { AddMemberModal } from "@/components/add-member-modal";
 import { EditPointsModal } from "@/components/edit-points-modal";
 import { useMembers } from "@/hooks/use-members";
 import { QuickAddPoints } from "@/components/quick-add-points";
-
+import { BurgerMenu } from "@/components/burgerMenu.jsx";
 import { useStats } from "@/hooks/use-stats";
 import type { Member, InsertMember, UpdatePoints } from "@shared/schema";
+import MobileNavBar from "@/components/MobileNavbar";
 
 export default function Dashboard() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-
-  const { 
-    members, 
-    isLoading: membersLoading, 
-    addMember, 
-    updatePoints, 
-    deleteMember 
+const PageName = "Dashboard";
+  const {
+    members,
+    isLoading: membersLoading,
+    addMember,
+    updatePoints,
+    deleteMember,
   } = useMembers();
-  
+
   const { stats, isLoading: statsLoading } = useStats();
 
   const handleAddMember = async (member: InsertMember) => {
@@ -35,7 +36,11 @@ export default function Dashboard() {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdatePoints = async (memberId: string, currentPoints: number, update: UpdatePoints) => {
+  const handleUpdatePoints = async (
+    memberId: string,
+    currentPoints: number,
+    update: UpdatePoints
+  ) => {
     await updatePoints.mutateAsync({ memberId, currentPoints, update });
   };
 
@@ -53,40 +58,14 @@ export default function Dashboard() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-card shadow-sm border-b border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center">
-            <h2 className="text-2xl font-semibold text-gray-900" data-testid="page-title">
-              Dashboard de Socios
-            </h2>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm" className="relative" data-testid="button-notifications">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full"></span>
-            </Button>
-            
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-white" />
-              </div>
-              <span className="text-sm font-medium text-gray-700" data-testid="user-name">
-                Admin
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
-
+     <MobileNavBar pageName={PageName} />
       {/* Dashboard Content */}
       <main className="flex-1 overflow-y-auto bg-surface">
         <div className="p-6">
           {/* Stats Cards */}
           <StatsCards stats={stats} isLoading={statsLoading} />
 
-          
-<QuickAddPoints members={members} />
+          <QuickAddPoints members={members} />
 
           {/* Members Management Section */}
           <MembersTable

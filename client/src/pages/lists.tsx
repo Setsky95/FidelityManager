@@ -4,7 +4,7 @@ import { ChevronDown, Trash2 } from "lucide-react";
 
 import { useLists } from "@/hooks/use-lists";
 import { useToast } from "@/hooks/use-toast";
-
+import MobileNavbar from "@/components/MobileNavbar.jsx";
 import { FirebaseService } from "@/lib/firebase";
 import type { Member } from "@/../shared/schema";
 
@@ -17,20 +17,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 export default function ListsPage() {
   const { lists, create, remove } = useLists();
   const { toast } = useToast();
+  const PageName = "Listas";
 
-  // ====== estado de creación ======
   const [nombre, setNombre] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
-  // ====== paginado de miembros ======
   const [pageSize, setPageSize] = useState<number>(25);
   const [members, setMembers] = useState<Member[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [loadingMembers, setLoadingMembers] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(true);
 
-  // carga inicial y cuando cambia el pageSize
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -81,7 +79,6 @@ export default function ListsPage() {
     }
   };
 
-  //borrar lista
   const handleDelete = async (l: { id: string; nombre: string }) => {
     const ok = window.confirm(
       `¿Eliminar la lista "${l.nombre}"? Esta acción no se puede deshacer.`
@@ -109,7 +106,6 @@ export default function ListsPage() {
     }
   };
 
-  // ====== selección & búsqueda local ======
   const filteredMembers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return members;
@@ -130,10 +126,7 @@ export default function ListsPage() {
 
   const handleCreate = async () => {
     if (!nombre.trim()) {
-      toast({
-        title: "Completa el nombre de la lista",
-        variant: "destructive",
-      });
+      toast({ title: "Completa el nombre de la lista", variant: "destructive" });
       return;
     }
     if (allSelected.length === 0) {
@@ -157,7 +150,6 @@ export default function ListsPage() {
     }
   };
 
-  // ====== detalles expandibles por lista ======
   const [openListId, setOpenListId] = useState<string | null>(null);
   const [detailsCache, setDetailsCache] = useState<
     Record<string, { loading: boolean; error?: string; members?: Member[] }>
@@ -165,8 +157,6 @@ export default function ListsPage() {
 
   const toggleOpen = async (listId: string, idsCsv: string) => {
     setOpenListId((prev) => (prev === listId ? null : listId));
-
-    // si nunca cargamos, traemos los miembros
     if (!detailsCache[listId]) {
       setDetailsCache((p) => ({ ...p, [listId]: { loading: true } }));
       try {
@@ -190,12 +180,12 @@ export default function ListsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-surface">
-      <div className="p-6 space-y-8 max-w-6xl">
-        <h2 className="text-2xl font-semibold">Listas</h2>
+<div className=" sm:max-w-screen-sm md:max-w-screen-md lg:max-w-screen-lg mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        <MobileNavbar pageName={PageName} />
 
         {/* Crear nueva lista */}
         <Card>
-          <CardContent className="p-6 space-y-4">
+          <CardContent className="p-4 sm:p-6 space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="md:col-span-1 space-y-2">
                 <Label htmlFor="list-name">Nombre de la lista</Label>
@@ -206,28 +196,32 @@ export default function ListsPage() {
                   onChange={(e) => setNombre(e.target.value)}
                   disabled={create.isPending}
                 />
-                <Button onClick={handleCreate} disabled={create.isPending}>
+                <Button
+                  onClick={handleCreate}
+                  disabled={create.isPending}
+                  className="w-full sm:w-auto"
+                >
                   {create.isPending ? "Creando..." : "Crear lista"}
                 </Button>
               </div>
 
               <div className="md:col-span-2 space-y-3">
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <Input
                     placeholder="Buscar por ID, nombre, apellido o email…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     disabled={loadingMembers}
-                    className="flex-1 min-w-[260px]"
+                    className="w-full sm:flex-1 min-w-[240px]"
                   />
 
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="page-size" className="text-sm">
+                    <Label htmlFor="page-size" className="text-xs sm:text-sm">
                       Registros
                     </Label>
                     <select
                       id="page-size"
-                      className="border rounded px-2 py-1 text-sm bg-background"
+                      className="h-9 border rounded px-2 pr-8 text-sm bg-background"
                       value={pageSize}
                       onChange={(e) => setPageSize(Number(e.target.value))}
                       disabled={loadingMembers}
@@ -239,60 +233,66 @@ export default function ListsPage() {
                     </select>
                   </div>
 
-                  <div className="text-sm text-muted-foreground ml-auto">
+                  <div className="text-xs sm:text-sm text-muted-foreground sm:ml-auto">
                     Seleccionados: <b>{allSelected.length}</b>
                   </div>
                 </div>
 
                 <div className="max-h-72 overflow-auto rounded border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted sticky top-0">
-                      <tr>
-                        <th className="text-left p-2 w-10"></th>
-                        <th className="text-left p-2">ID</th>
-                        <th className="text-left p-2">Nombre</th>
-                        <th className="text-left p-2">Email</th>
-                        <th className="text-right p-2">Puntos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loadingMembers && members.length === 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm min-w-[680px]">
+                      <thead className="bg-muted sticky top-0">
                         <tr>
-                          <td className="p-3" colSpan={5}>
-                            Cargando socios…
-                          </td>
+                          <th className="text-left p-2 w-10"></th>
+                          <th className="text-left p-2">ID</th>
+                          <th className="text-left p-2">Nombre</th>
+                          <th className="text-left p-2 hidden sm:table-cell">
+                            Email
+                          </th>
+                          <th className="text-right p-2">Puntos</th>
                         </tr>
-                      )}
-                      {filteredMembers.map((m) => (
-                        <tr key={m.id} className="border-t">
-                          <td className="p-2">
-                            <Checkbox
-                              checked={!!selected[m.id]}
-                              onCheckedChange={() => toggle(m.id)}
-                            />
-                          </td>
-                          <td className="p-2 font-mono">{m.id}</td>
-                          <td className="p-2">
-                            {m.nombre} {m.apellido}
-                          </td>
-                          <td className="p-2">{m.email}</td>
-                          <td className="p-2 text-right">{m.puntos}</td>
-                        </tr>
-                      ))}
-                      {!loadingMembers &&
-                        filteredMembers.length === 0 &&
-                        members.length > 0 && (
+                      </thead>
+                      <tbody>
+                        {loadingMembers && members.length === 0 && (
                           <tr>
                             <td className="p-3" colSpan={5}>
-                              Sin resultados.
+                              Cargando socios…
                             </td>
                           </tr>
                         )}
-                    </tbody>
-                  </table>
+                        {filteredMembers.map((m) => (
+                          <tr key={m.id} className="border-t">
+                            <td className="p-2">
+                              <Checkbox
+                                checked={!!selected[m.id]}
+                                onCheckedChange={() => toggle(m.id)}
+                              />
+                            </td>
+                            <td className="p-2 font-mono">{m.id}</td>
+                            <td className="p-2">
+                              {m.nombre} {m.apellido}
+                            </td>
+                            <td className="p-2 hidden sm:table-cell break-all">
+                              {m.email}
+                            </td>
+                            <td className="p-2 text-right">{m.puntos}</td>
+                          </tr>
+                        ))}
+                        {!loadingMembers &&
+                          filteredMembers.length === 0 &&
+                          members.length > 0 && (
+                            <tr>
+                              <td className="p-3" colSpan={5}>
+                                Sin resultados.
+                              </td>
+                            </tr>
+                          )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                   <div className="text-xs text-muted-foreground">
                     Mostrando {members.length} registros
                     {hasMore ? "" : " (fin)"}
@@ -303,6 +303,7 @@ export default function ListsPage() {
                       variant="outline"
                       onClick={loadMore}
                       disabled={loadingMembers}
+                      className="w-full sm:w-auto"
                     >
                       {loadingMembers ? "Cargando..." : "Cargar más"}
                     </Button>
@@ -315,140 +316,137 @@ export default function ListsPage() {
 
         {/* Listas existentes con desplegable */}
         <Card>
-          <CardContent className="p-6 space-y-3">
-            <h3 className="text-lg font-medium">Listas existentes</h3>
+          <CardContent className="p-4 sm:p-6 space-y-3">
+            <h3 className="text-base sm:text-lg font-medium">Listas existentes</h3>
             <div className="overflow-auto rounded border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="text-left p-2 w-16"></th>
-                    <th className="text-left p-2">Nombre</th>
-                    <th className="text-left p-2">IDs</th>
-                    <th className="text-right p-2">Cantidad</th>
-                    <th className="text-right p-2">Borrar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lists.isLoading && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs sm:text-sm min-w-[700px]">
+                  <thead className="bg-muted">
                     <tr>
-                      <td className="p-3" colSpan={4}>
-                        Cargando listas…
-                      </td>
+                      <th className="text-left p-2 w-16"></th>
+                      <th className="text-left p-2">Nombre</th>
+                      <th className="text-left p-2 hidden sm:table-cell">
+                        IDs
+                      </th>
+                      <th className="text-right p-2">Cantidad</th>
+                      <th className="text-right p-2">Borrar</th>
                     </tr>
-                  )}
+                  </thead>
+                  <tbody>
+                    {lists.isLoading && (
+                      <tr>
+                        <td className="p-3" colSpan={5}>
+                          Cargando listas…
+                        </td>
+                      </tr>
+                    )}
 
-                  {(lists.data ?? []).map((l) => {
-                    const count = l.Ids
-                      ? l.Ids.split(",").filter(Boolean).length
-                      : 0;
-                    const isOpen = openListId === l.id;
-                    const det = detailsCache[l.id];
+                    {(lists.data ?? []).map((l) => {
+                      const count = l.Ids
+                        ? l.Ids.split(",").filter(Boolean).length
+                        : 0;
+                      const isOpen = openListId === l.id;
+                      const det = detailsCache[l.id];
 
-                    return (
-                      <>
-                        <tr key={l.id} className="border-t">
-                          <td className="p-2 align-top">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => toggleOpen(l.id, l.Ids)}
-                                className="rounded p-1 hover:bg-muted transition"
-                                aria-label={isOpen ? "Cerrar" : "Ver detalles"}
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${
-                                    isOpen ? "rotate-180" : ""
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="p-2 align-top">{l.nombre}</td>
-                          <td className="p-2 align-top font-mono break-all">
-                            {l.Ids}
-                          </td>
-                          <td className="p-2 align-top text-right">{count}</td>
-                          <td className="p-2 align-top text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(l)}
-                              className="rounded p-1 hover:bg-red-50 text-red-600 transition"
-                              title="Eliminar lista"
-                              aria-label="Eliminar lista"
-                              disabled={remove.isPending}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-
-                        {/* Fila expandida */}
-                        {isOpen && (
-                          <tr className="bg-muted/30">
-                            <td colSpan={4} className="p-0">
-                              <div className="p-4">
-                                {det?.loading && <div>Cargando socios…</div>}
-                                {det?.error && (
-                                  <div className="text-destructive">
-                                    {det.error}
-                                  </div>
-                                )}
-                                {det?.members && det.members.length === 0 && (
-                                  <div>No hay socios en esta lista.</div>
-                                )}
-                                {det?.members && det.members.length > 0 && (
-                                  <div className="overflow-auto rounded border bg-background">
-                                    <table className="w-full text-sm">
-                                      <thead className="bg-muted">
-                                        <tr>
-                                          <th className="text-left p-2">ID</th>
-                                          <th className="text-left p-2">
-                                            Nombre
-                                          </th>
-                                          <th className="text-left p-2">
-                                            Email
-                                          </th>
-                                          <th className="text-right p-2">
-                                            Puntos
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {det.members.map((m) => (
-                                          <tr key={m.id} className="border-t">
-                                            <td className="p-2 font-mono">
-                                              {m.id}
-                                            </td>
-                                            <td className="p-2">
-                                              {m.nombre} {m.apellido}
-                                            </td>
-                                            <td className="p-2">{m.email}</td>
-                                            <td className="p-2 text-right">
-                                              {m.puntos}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
+                      return (
+                        <>
+                          <tr key={l.id} className="border-t">
+                            <td className="p-2 align-top">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleOpen(l.id, l.Ids)}
+                                  className="rounded p-1 hover:bg-muted transition"
+                                  aria-label={isOpen ? "Cerrar" : "Ver detalles"}
+                                >
+                                  <ChevronDown
+                                    className={`h-4 w-4 transition-transform ${
+                                      isOpen ? "rotate-180" : ""
+                                    }`}
+                                  />
+                                </button>
                               </div>
                             </td>
+                            <td className="p-2 align-top">{l.nombre}</td>
+                            <td className="p-2 align-top font-mono break-all hidden sm:table-cell">
+                              {l.Ids}
+                            </td>
+                            <td className="p-2 align-top text-right">{count}</td>
+                            <td className="p-2 align-top text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(l)}
+                                className="rounded p-1 hover:bg-red-50 text-red-600 transition"
+                                title="Eliminar lista"
+                                aria-label="Eliminar lista"
+                                disabled={remove.isPending}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
                           </tr>
-                        )}
-                      </>
-                    );
-                  })}
 
-                  {!lists.isLoading && (lists.data ?? []).length === 0 && (
-                    <tr>
-                      <td className="p-3" colSpan={4}>
-                        Aún no hay listas.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          {isOpen && (
+                            <tr className="bg-muted/30">
+                              <td colSpan={5} className="p-0">
+                                <div className="p-4">
+                                  {det?.loading && <div>Cargando socios…</div>}
+                                  {det?.error && (
+                                    <div className="text-destructive">{det.error}</div>
+                                  )}
+                                  {det?.members && det.members.length === 0 && (
+                                    <div>No hay socios en esta lista.</div>
+                                  )}
+                                  {det?.members && det.members.length > 0 && (
+                                    <div className="overflow-auto rounded border bg-background">
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-xs sm:text-sm min-w-[620px]">
+                                          <thead className="bg-muted">
+                                            <tr>
+                                              <th className="text-left p-2">ID</th>
+                                              <th className="text-left p-2">Nombre</th>
+                                              <th className="text-left p-2 hidden sm:table-cell">
+                                                Email
+                                              </th>
+                                              <th className="text-right p-2">Puntos</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {det.members.map((m) => (
+                                              <tr key={m.id} className="border-t">
+                                                <td className="p-2 font-mono">{m.id}</td>
+                                                <td className="p-2">
+                                                  {m.nombre} {m.apellido}
+                                                </td>
+                                                <td className="p-2 hidden sm:table-cell break-all">
+                                                  {m.email}
+                                                </td>
+                                                <td className="p-2 text-right">{m.puntos}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+
+                    {!lists.isLoading && (lists.data ?? []).length === 0 && (
+                      <tr>
+                        <td className="p-3" colSpan={5}>
+                          Aún no hay listas.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </CardContent>
         </Card>

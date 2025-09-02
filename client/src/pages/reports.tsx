@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FirebaseService } from "@/lib/firebase";
 import type { Movement, MovementType } from "@shared/schema";
+import { BurgerMenu } from "@/components/burgerMenu.jsx";
 
 const TYPE_OPTIONS: { value: "all" | MovementType; label: string }[] = [
   { value: "all",            label: "Todos los eventos" },
@@ -33,8 +34,13 @@ export default function Reports() {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-card shadow-sm border-b border-gray-200">
+        
         <div className="px-6 py-4 flex items-center justify-between">
+          <div className="reports-navbar flex items-center justify-between">
+                                <BurgerMenu />
           <h2 className="text-2xl font-semibold text-gray-900">Reportes</h2>
+
+          </div>
 
           <div className="flex items-center gap-3">
             {/* Filtro por tipo */}
