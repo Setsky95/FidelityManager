@@ -13,11 +13,7 @@ type QuickAddPointsProps = {
   isSubmitting?: boolean;
 };
 
-export function QuickAddPoints({
-  members,
-  onAddPoints,
-  isSubmitting,
-}: QuickAddPointsProps) {
+export function QuickAddPoints({ members, onAddPoints, isSubmitting }: QuickAddPointsProps) {
   const safeMembers = Array.isArray(members) ? members : [];
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
@@ -28,38 +24,28 @@ export function QuickAddPoints({
   const { toast } = useToast();
 
   const addPointsMutation = useMutation({
-    mutationFn: async ({
-      id,
-      delta,
-      reason,
-    }: {
-      id: string;
-      delta: number;
-      reason?: string;
-    }) => {
-      const res = await fetch("/api/members/points", {
+    mutationFn: async ({ memberId, amount, reason }: { memberId: string; amount: number; reason?: string }) => {
+      const res = await fetch("/api/members/points-add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, delta, reason }),
+        body: JSON.stringify({ memberId, amount, reason }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      const text = await res.text();
+      let json: any = null;
+      try { json = text ? JSON.parse(text) : null; } catch { /* respuesta no-JSON (vercel error page) */ }
+      if (!res.ok || json?.ok === false) {
+        const msg = json?.error || json?.message || text || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
       return json;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({
-        title: "Éxito",
-        description: "Puntos agregados. Si correspondía, se envió el email al socio.",
-      });
+      toast({ title: "Éxito", description: "Puntos agregados. Si correspondía, se enviaron los emails." });
     },
     onError: (err: any) => {
-      toast({
-        title: "Error",
-        description: String(err?.message || err),
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: String(err?.message || err), variant: "destructive" });
     },
   });
 
@@ -95,17 +81,12 @@ export function QuickAddPoints({
 
   const handleAdd = useCallback(async () => {
     if (!selected || amount <= 0 || pending) return;
-
-    const delta = Number.isFinite(amount) ? amount : 1;
+    const amt = Number.isFinite(amount) ? amount : 1;
 
     if (onAddPoints) {
-      await onAddPoints(String(selected.id), delta);
+      await onAddPoints(String(selected.id), amt);
     } else {
-      await addPointsMutation.mutateAsync({
-        id: String(selected.id),
-        delta,
-        reason: "Carga rápida",
-      });
+      await addPointsMutation.mutateAsync({ memberId: String(selected.id), amount: amt, reason: "Carga rápida" });
     }
 
     setAmount(1);
@@ -121,11 +102,8 @@ export function QuickAddPoints({
   const handleSearchKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (!selected && results.length > 0) {
-        handlePick(results[0].id);
-      } else {
-        handleAdd();
-      }
+      if (!selected && results.length > 0) handlePick(results[0].id);
+      else handleAdd();
     }
     if (e.key === "Escape") {
       if (query) setQuery("");
@@ -136,13 +114,8 @@ export function QuickAddPoints({
   return (
     <Card className="border border-gray-200 mb-6">
       <CardContent className="p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">
-          Sumar Puntos
-        </h3>
-
-        {/* Buscador | cantidad | botón */}
+        <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Sumar Puntos</h3>
         <div className="grid gap-3 items-center md:grid-cols-[minmax(0,1fr)_140px_180px]">
-          {/* Buscador + resultados */}
           <div className="relative">
             <div className="relative">
               <Input
@@ -157,7 +130,6 @@ export function QuickAddPoints({
               />
               <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
-
             {query && results.length > 0 && (
               <div className="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-auto max-h-64">
                 {results.map((m) => (
@@ -169,8 +141,7 @@ export function QuickAddPoints({
                     data-testid={`quickadd-result-${m.id}`}
                   >
                     <div className="text-sm font-medium text-gray-900">
-                      {m.nombre} {m.apellido}{" "}
-                      <span className="text-gray-400">· {String(m.id)}</span>
+                      {m.nombre} {m.apellido} <span className="text-gray-400">· {String(m.id)}</span>
                     </div>
                     <div className="text-xs text-gray-500">{m.email}</div>
                   </button>
@@ -179,7 +150,6 @@ export function QuickAddPoints({
             )}
           </div>
 
-          {/* Cantidad */}
           <div className="flex flex-col">
             <Input
               id="quickadd-amount"
@@ -194,7 +164,6 @@ export function QuickAddPoints({
             />
           </div>
 
-          {/* Botón */}
           <div className="flex items-end">
             <Button
               className="w-full h-10"
@@ -208,28 +177,16 @@ export function QuickAddPoints({
           </div>
         </div>
 
-        {/* Seleccionado */}
         {selected && !query && (
-          <div
-            className="mt-2 text-sm text-gray-600 flex items-center gap-2"
-            data-testid="quickadd-selected"
-          >
+          <div className="mt-2 text-sm text-gray-600 flex items-center gap-2" data-testid="quickadd-selected">
             <div className="truncate">
               Seleccionado:{" "}
               <span className="font-medium text-gray-900">
                 {selected.nombre} {selected.apellido}
               </span>{" "}
-              <span className="text-gray-400">({String(selected.id)})</span> —{" "}
-              {selected.email}
+              <span className="text-gray-400">({String(selected.id)})</span> — {selected.email}
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleClear}
-              className="h-7 px-2"
-              aria-label="Borrar selección"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={handleClear} className="h-7 px-2" aria-label="Borrar selección">
               <X className="h-4 w-4" />
             </Button>
           </div>

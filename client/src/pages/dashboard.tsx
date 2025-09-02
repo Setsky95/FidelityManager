@@ -65,8 +65,12 @@ const PageName = "Dashboard";
           {/* Stats Cards */}
           <StatsCards stats={stats} isLoading={statsLoading} />
 
-          <QuickAddPoints members={members} />
-
+<QuickAddPoints
+  members={members}
+  onAddPoints={(memberId, amount) =>
+    updatePoints.mutateAsync({ memberId, amount, reason: "Carga rápida" })
+  }
+/>
           {/* Members Management Section */}
           <MembersTable
             members={members}
