@@ -38,9 +38,9 @@ export const publicRegisterSchema = z.object({
   nombre: z.string().min(1),
   apellido: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(8).max(72), // 👈 nuevo
+  password: z.string().min(8),
+  profilePicture: z.enum(["1.webp", "2.webp", "3.webp", "4.webp"]), // nuevo
 });
-
 export type PublicRegister = z.infer<typeof publicRegisterSchema>;
 
 export const updatePointsSchema = z.object({
