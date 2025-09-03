@@ -5,45 +5,20 @@ import { getTemplateByKey, renderTemplate } from "../_lib/templates.js";
 import { Timestamp } from "firebase-admin/firestore";
 import bcrypt from "bcryptjs";
 
-/** Helpers URL */
-function isAbsoluteUrl(v?: string) {
-  return typeof v === "string" && /^https?:\/\//i.test(v);
-}
+// ✅ SOLO estas 4 URLs son válidas
+const ALLOWED_PROFILE_PICTURES = [
+  "https://imgfz.com/i/rIbPLBA.jpeg",
+  "https://imgfz.com/i/k6rqewz.jpeg",
+  "https://imgfz.com/i/ifsrEgV.jpeg",
+  "https://imgfz.com/i/mD5KnXZ.jpeg",
+] as const;
+const ALLOWED_SET = new Set(ALLOWED_PROFILE_PICTURES);
+const DEFAULT_PIC = ALLOWED_PROFILE_PICTURES[0];
 
-function getPublicBaseUrl(): string {
-  let base =
-    process.env.PROFILE_PICTURES_BASE_URL || // opcional: CDN/host externo para avatares
-    process.env.PUBLIC_BASE_URL ||
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-    process.env.VERCEL_URL ||
-    "";
-  if (base && !/^https?:\/\//i.test(base)) base = `https://${base}`;
-  return base.replace(/\/+$/g, "");
-}
-
-/** Normaliza el valor recibido:
- *  - Si es URL absoluta, la deja tal cual (ideal para CRC tipo imgfz.com).
- *  - Si es filename (1.jpg / 1.webp o con /Profile-Pictures/), normaliza a .jpg
- *    y arma una URL absoluta usando la base pública.
- *  - Si no viene o es inválido, usa 1.jpg
- */
-function normalizeProfilePicture(input: unknown): string {
-  if (typeof input !== "string" || !input.trim()) {
-    input = "1.jpg";
-  }
-  let v = input.trim();
-
-  // Caso 1: ya es URL absoluta (p.ej., https://imgfz.com/i/xxx.jpeg)
-  if (isAbsoluteUrl(v)) return v;
-
-  // Caso 2: filename / ruta relativa -> normalizar a .jpg
-  const just = v.replace(/^\/?Profile-Pictures\//i, "");
-  const m = /^([1-4])\.(jpe?g|webp)$/i.exec(just);
-  const file = m ? `${m[1]}.jpg` : "1.jpg";
-
-  const base = getPublicBaseUrl();
-  // Si hay base, devolvemos absoluta (recomendado para emails); si no, relativa
-  return base ? `${base}/Profile-Pictures/${file}` : `/Profile-Pictures/${file}`;
+function pickAllowedProfilePicture(input: unknown): string {
+  if (typeof input !== "string") return DEFAULT_PIC;
+  const clean = input.trim();
+  return ALLOWED_SET.has(clean) ? clean : DEFAULT_PIC;
 }
 
 export default async function handler(req: any, res: any) {
@@ -60,8 +35,8 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ ok: false, error: "Datos inválidos" });
     }
 
-    // 👉 normalizamos/validamos la foto de perfil a URL (absoluta si es posible)
-    const profilePicUrl = normalizeProfilePicture(profilePicture);
+    // 👉 siempre cae en una de las 4 URLs
+    const profilePic = pickAllowedProfilePicture(profilePicture);
 
     const clean = {
       nombre: nombre.trim(),
@@ -70,11 +45,8 @@ export default async function handler(req: any, res: any) {
     };
 
     // Duplicado por email
-    const dup = await adminDb
-      .collection("suscriptores")
-      .where("email", "==", clean.email)
-      .limit(1)
-      .get();
+    const dup = await adminDb.collection("suscriptores")
+      .where("email", "==", clean.email).limit(1).get();
     if (!dup.empty) return res.status(409).json({ ok: false, error: "El email ya está registrado" });
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -102,8 +74,7 @@ export default async function handler(req: any, res: any) {
         fechaRegistro: now,
         ultimaActualizacion: now,
         ultimoMotivo: "Registro público",
-        // 🆕 guarda el URL (absoluto si hay base)
-        profilePicture: profilePicUrl,
+        profilePicture: profilePic, // ✅ guarda una de las 4 URLs
       });
 
       const movRef = adminDb.collection("movimientos").doc();
@@ -126,7 +97,7 @@ export default async function handler(req: any, res: any) {
         nombre: clean.nombre,
         apellido: clean.apellido,
         email: clean.email,
-        profilePicture: profilePicUrl,
+        profilePicture: profilePic,
       };
     });
 
@@ -141,9 +112,8 @@ export default async function handler(req: any, res: any) {
           id: result.id,
           puntos: 0,
           delta: 0,
-          // Para plantillas:
-          profilePicture: result.profilePicture,     // por compatibilidad
-          profilePictureUrl: result.profilePicture,  // asegura absoluta en el template
+          profilePicture: result.profilePicture,
+          profilePictureUrl: result.profilePicture, // ya es absoluta
           year: new Date().getFullYear(),
         };
         await sendEmail({
