@@ -13,19 +13,33 @@ function setCookie(res: any, token: string, maxAgeSec: number) {
   res.setHeader("Set-Cookie", cookie);
 }
 
-function parseMaxAge(expires: string | number | undefined): number {
+// Normaliza JWT_EXPIRES a un tipo válido para jsonwebtoken
+type Exp = jwt.SignOptions["expiresIn"];
+function resolveExpires(input?: string | number | null): Exp {
+  if (typeof input === "number") return Math.max(1, Math.floor(input));
+  const v = String(input ?? "7d").trim();
+  if (/^\d+$/.test(v)) return Number(v); // segundos
+  if (/^\d+(ms|s|m|h|d|w|y)$/i.test(v)) return v as Exp; // ej "7d"
+  return "7d";
+}
+
+// Convierte expires a Max-Age en segundos para la cookie
+function toMaxAgeSec(expires: Exp): number {
   if (typeof expires === "number") return Math.max(1, Math.floor(expires));
-  const val = (expires || "7d").trim().toLowerCase();
-  // "7d" → días; número → segundos
-  if (/^\d+d$/.test(val)) {
-    const d = parseInt(val.replace("d", ""), 10);
-    return Math.max(1, d * 24 * 60 * 60);
-  }
-  if (/^\d+$/.test(val)) {
-    return Math.max(1, parseInt(val, 10));
-  }
-  // fallback 7 días
-  return 7 * 24 * 60 * 60;
+  const m = /^(\d+)(ms|s|m|h|d|w|y)$/i.exec(expires);
+  if (!m) return 7 * 24 * 60 * 60;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  const mul: Record<string, number> = {
+    ms: 1 / 1000,
+    s: 1,
+    m: 60,
+    h: 3600,
+    d: 86400,
+    w: 604800,
+    y: 31536000,
+  };
+  return Math.max(1, Math.floor(n * (mul[unit] ?? 86400)));
 }
 
 export default async function handler(req: any, res: any) {
@@ -68,13 +82,11 @@ export default async function handler(req: any, res: any) {
       console.error("[/api/public/login] Falta JWT_SECRET");
       return res.status(500).json({ ok: false, error: "Config faltante: JWT_SECRET" });
     }
-    const expiresEnv = process.env.JWT_EXPIRES || "7d";
-    const maxAgeSec = parseMaxAge(expiresEnv);
 
-    // 👇 Forzamos el tipo del secreto y pasamos opciones como tercer argumento
-    const token = jwt.sign(payload, secretEnv as jwt.Secret, { expiresIn: expiresEnv });
+    const expiresIn = resolveExpires(process.env.JWT_EXPIRES || "7d");
+    const token = jwt.sign(payload, secretEnv as jwt.Secret, { expiresIn }); // 👈 tipos correctos
+    setCookie(res, token, toMaxAgeSec(expiresIn));
 
-    setCookie(res, token, maxAgeSec);
     return res.status(200).json({ ok: true, member: payload });
   } catch (e: any) {
     console.error("[/api/public/login] unhandled:", e);

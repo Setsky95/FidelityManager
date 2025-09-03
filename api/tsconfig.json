@@ -8,5 +8,5 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "../guardado de apis/test-email.ts", "../guardado de apis/points.ts"]
 }

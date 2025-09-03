@@ -5,28 +5,21 @@ import { getTemplateByKey, renderTemplate } from "../_lib/templates.js";
 import { Timestamp } from "firebase-admin/firestore";
 import bcrypt from "bcryptjs";
 
-// ✅ SOLO estas 4 URLs son válidas
-const ALLOWED_PROFILE_PICTURES = [
+// ✅ Whitelist como Set<string> (evita literales 'as const' que rompen TS)
+const ALLOWED_PROFILE_PICTURES = new Set<string>([
   "https://imgfz.com/i/rIbPLBA.jpeg",
   "https://imgfz.com/i/k6rqewz.jpeg",
   "https://imgfz.com/i/ifsrEgV.jpeg",
   "https://imgfz.com/i/mD5KnXZ.jpeg",
-] as const;
+]);
 
-function normalizeProfilePicture(input: unknown): string {
-  const FALLBACK = "https://imgfz.com/i/rIbPLBA.jpeg";
-  if (typeof input !== "string") return FALLBACK;
-  const url = input.trim();
-  return ALLOWED_PROFILE_PICTURES.has(url) ? url : FALLBACK;
-}
+const DEFAULT_PIC = "https://imgfz.com/i/rIbPLBA.jpeg";
 
-const ALLOWED_SET = new Set(ALLOWED_PROFILE_PICTURES);
-const DEFAULT_PIC = ALLOWED_PROFILE_PICTURES[0];
-
+// Siempre retorna una de las 4 URLs válidas
 function pickAllowedProfilePicture(input: unknown): string {
   if (typeof input !== "string") return DEFAULT_PIC;
   const clean = input.trim();
-  return ALLOWED_SET.has(clean) ? clean : DEFAULT_PIC;
+  return ALLOWED_PROFILE_PICTURES.has(clean) ? clean : DEFAULT_PIC;
 }
 
 export default async function handler(req: any, res: any) {
@@ -43,7 +36,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ ok: false, error: "Datos inválidos" });
     }
 
-    // 👉 siempre cae en una de las 4 URLs
+    // 👉 normalizá la foto (queda sí o sí en la whitelist)
     const profilePic = pickAllowedProfilePicture(profilePicture);
 
     const clean = {
@@ -53,9 +46,14 @@ export default async function handler(req: any, res: any) {
     };
 
     // Duplicado por email
-    const dup = await adminDb.collection("suscriptores")
-      .where("email", "==", clean.email).limit(1).get();
-    if (!dup.empty) return res.status(409).json({ ok: false, error: "El email ya está registrado" });
+    const dup = await adminDb
+      .collection("suscriptores")
+      .where("email", "==", clean.email)
+      .limit(1)
+      .get();
+    if (!dup.empty) {
+      return res.status(409).json({ ok: false, error: "El email ya está registrado" });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -120,8 +118,8 @@ export default async function handler(req: any, res: any) {
           id: result.id,
           puntos: 0,
           delta: 0,
-          profilePicture: result.profilePicture,
-          profilePictureUrl: result.profilePicture, // ya es absoluta
+          profilePicture: result.profilePicture,       // disponible como {{profilePicture}}
+          profilePictureUrl: result.profilePicture,    // disponible como {{profilePictureUrl}}
           year: new Date().getFullYear(),
         };
         await sendEmail({

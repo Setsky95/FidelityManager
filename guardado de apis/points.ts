@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { adminDb } from "../_lib/firebase";
-import { getTemplateByKey, renderTemplate } from "../_lib/templates";
-import { sendEmail } from "../_lib/email";
+import { adminDb } from "../api/_lib/firebase";
+import { getTemplateByKey, renderTemplate } from "../api/_lib/templates";
+import { sendEmail } from "../api/_lib/email";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).end();

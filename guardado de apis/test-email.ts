@@ -1,6 +1,6 @@
 // api/automations/test-emails.ts
-import { sendEmail } from "../_lib/email.js";
-import { getTemplateByKey, renderTemplate } from "../_lib/templates.js";
+import { sendEmail } from "../api/_lib/email.js";
+import { getTemplateByKey, renderTemplate } from "../api/_lib/templates.js";
 
 export default async function handler(req: any, res: any) {
   try {
