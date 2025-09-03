@@ -114,3 +114,17 @@ export type AutomationsSettingsFile = {
   pointsAddEmail: AutomationEmailSettings;
   levelUpEmail: LevelUpEmailSettings;
 };
+
+export type CampaignEmailSettings = {
+  enabled: boolean;
+  from: string;
+  subject: string;
+  body: string;
+  promoTexto?: string;
+  promoPrecio?: string;
+  promoFecha?: string;
+};
+
+export type CampaignsSettingsFile = {
+  campaignEmail: CampaignEmailSettings;
+};

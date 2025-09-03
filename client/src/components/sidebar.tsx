@@ -9,6 +9,8 @@ const navigation = [
   { name: "Listas", href: "/listas", icon: List },
   { name: "Reportes", href: "/reports", icon: BarChart3 },
   { name: "Automations", href: "/automations", icon: ClipboardClock },
+  { name: "Campaings", href: "/campaigns", icon: ClipboardClock },
+
 
 ];
 

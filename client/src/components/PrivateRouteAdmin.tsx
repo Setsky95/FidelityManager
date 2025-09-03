@@ -14,7 +14,7 @@ export function PrivateRouteAdmin({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <Redirect to="/admin-login" />; // 👈 o a la ruta de login de admin
+    return <Redirect to="/sign-in" />; // 👈 o a la ruta de login de admin
   }
 
   return <>{children}</>;
