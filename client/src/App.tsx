@@ -10,6 +10,7 @@ import { PrivateRouteSubscriber } from "@/components/PrivateRouteSubscriber";
 import { PrivateRouteAdmin } from "@/components/PrivateRouteAdmin";
 import { SubAuthProvider } from "@/providers/SubAuthProvider";
 import { AdminAuthProvider } from "@/providers/AdminAuthProvider";
+import AdminLoginPage from "@/pages/admin-login";
 
 import { Sidebar } from "@/components/sidebar";
 import Dashboard from "@/pages/dashboard";
@@ -53,6 +54,8 @@ export default function App() {
         <SubAuthProvider>
           <Switch>
             {/* Públicas */}
+                    <Route path="/admin-login" component={AdminLoginPage} />
+
             <Route path="/login" component={LoginPage} />
             <Route path="/sign-in" component={SignIn} />
             <Route path="/sumate" component={SumatePage} />

@@ -1,68 +1,64 @@
-import * as React from "react";
+// src/providers/AuthProvider.tsx
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  auth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  setPersistence,
+  browserLocalPersistence,
+  onAuthStateChanged,
+  signOut,
+  type User
+} from "@/lib/firebase";
 
-type Member = {
-  id: string;
-  numero: number;
-  email: string;
-  nombre: string;
-  apellido: string;
-  puntos?: number;
-  profilePicture?: string | null;
-  fechaRegistro?: string | null;
-};
-
-type AuthCtx = {
-  user: Member | null;
+type AdminAuthCtx = {
+  user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  refresh: () => Promise<void>;
 };
 
-const Ctx = React.createContext<AuthCtx>({} as any);
+const Ctx = createContext<AdminAuthCtx>(null as any);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<Member | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = React.useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/me", { credentials: "include" });
-      const json = await res.json();
-      setUser(json?.ok ? json.member : null);
-    } catch {
-      setUser(null);
-    } finally {
+  useEffect(() => {
+    // Escucha una sola vez y controla loading
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u ?? null);
       setLoading(false);
-    }
+    }, (err) => {
+      console.error("[onAuthStateChanged]", err);
+      setUser(null);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
 
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const login = async (email: string, password: string) => {
-    const res = await fetch("/api/public/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json?.ok) throw new Error(json?.error || "Login inválido");
-    await refresh();
+  const loginWithGoogle = async () => {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged disparará -> user != null
+    } catch (e: any) {
+      console.error("[loginWithGoogle]", e);
+      alert(e?.message || "No se pudo iniciar sesión con Google");
+      throw e;
+    }
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    setUser(null);
+    await signOut(auth);
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, login, logout, refresh }}>
+    <Ctx.Provider value={{ user, loading, loginWithGoogle, logout }}>
       {children}
     </Ctx.Provider>
   );
 }
 
-export const useAuth = () => React.useContext(Ctx);
+export const useAuth = () => useContext(Ctx);
