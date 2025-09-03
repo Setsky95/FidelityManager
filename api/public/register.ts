@@ -5,18 +5,45 @@ import { getTemplateByKey, renderTemplate } from "../_lib/templates.js";
 import { Timestamp } from "firebase-admin/firestore";
 import bcrypt from "bcryptjs";
 
-const ALLOWED_PROFILE_PICTURES = new Set(["1.webp", "2.webp", "3.webp", "4.webp"]);
+/** Helpers URL */
+function isAbsoluteUrl(v?: string) {
+  return typeof v === "string" && /^https?:\/\//i.test(v);
+}
+
+function getPublicBaseUrl(): string {
+  let base =
+    process.env.PROFILE_PICTURES_BASE_URL || // opcional: CDN/host externo para avatares
+    process.env.PUBLIC_BASE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    "";
+  if (base && !/^https?:\/\//i.test(base)) base = `https://${base}`;
+  return base.replace(/\/+$/g, "");
+}
 
 /** Normaliza el valor recibido:
- *  - Acepta "1.webp" o "/Profile-Pictures/1.webp"
- *  - Devuelve siempre "1.webp" (solo el filename)
- *  - Si no es válido, devuelve el default ("1.webp")
+ *  - Si es URL absoluta, la deja tal cual (ideal para CRC tipo imgfz.com).
+ *  - Si es filename (1.jpg / 1.webp o con /Profile-Pictures/), normaliza a .jpg
+ *    y arma una URL absoluta usando la base pública.
+ *  - Si no viene o es inválido, usa 1.jpg
  */
 function normalizeProfilePicture(input: unknown): string {
-  if (typeof input !== "string") return "1.webp";
-  const trimmed = input.trim();
-  const justFile = trimmed.replace(/^\/?Profile-Pictures\//i, "");
-  return ALLOWED_PROFILE_PICTURES.has(justFile) ? justFile : "1.webp";
+  if (typeof input !== "string" || !input.trim()) {
+    input = "1.jpg";
+  }
+  let v = input.trim();
+
+  // Caso 1: ya es URL absoluta (p.ej., https://imgfz.com/i/xxx.jpeg)
+  if (isAbsoluteUrl(v)) return v;
+
+  // Caso 2: filename / ruta relativa -> normalizar a .jpg
+  const just = v.replace(/^\/?Profile-Pictures\//i, "");
+  const m = /^([1-4])\.(jpe?g|webp)$/i.exec(just);
+  const file = m ? `${m[1]}.jpg` : "1.jpg";
+
+  const base = getPublicBaseUrl();
+  // Si hay base, devolvemos absoluta (recomendado para emails); si no, relativa
+  return base ? `${base}/Profile-Pictures/${file}` : `/Profile-Pictures/${file}`;
 }
 
 export default async function handler(req: any, res: any) {
@@ -33,8 +60,8 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ ok: false, error: "Datos inválidos" });
     }
 
-    // 👉 normalizamos/validamos la foto de perfil
-    const profilePic = normalizeProfilePicture(profilePicture);
+    // 👉 normalizamos/validamos la foto de perfil a URL (absoluta si es posible)
+    const profilePicUrl = normalizeProfilePicture(profilePicture);
 
     const clean = {
       nombre: nombre.trim(),
@@ -75,8 +102,8 @@ export default async function handler(req: any, res: any) {
         fechaRegistro: now,
         ultimaActualizacion: now,
         ultimoMotivo: "Registro público",
-        // 🆕 guarda el filename elegido (el frontend arma la URL con /Profile-Pictures/${filename})
-        profilePicture: profilePic,
+        // 🆕 guarda el URL (absoluto si hay base)
+        profilePicture: profilePicUrl,
       });
 
       const movRef = adminDb.collection("movimientos").doc();
@@ -93,7 +120,14 @@ export default async function handler(req: any, res: any) {
         createdAt: now,
       });
 
-      return { id, numero, nombre: clean.nombre, apellido: clean.apellido, email: clean.email, profilePicture: profilePic };
+      return {
+        id,
+        numero,
+        nombre: clean.nombre,
+        apellido: clean.apellido,
+        email: clean.email,
+        profilePicture: profilePicUrl,
+      };
     });
 
     // Email de bienvenida (no bloqueante)
@@ -107,8 +141,10 @@ export default async function handler(req: any, res: any) {
           id: result.id,
           puntos: 0,
           delta: 0,
-          // si querés usar la imagen en la plantilla:
-          profilePicture: result.profilePicture, // opcional
+          // Para plantillas:
+          profilePicture: result.profilePicture,     // por compatibilidad
+          profilePictureUrl: result.profilePicture,  // asegura absoluta en el template
+          year: new Date().getFullYear(),
         };
         await sendEmail({
           to: result.email,
