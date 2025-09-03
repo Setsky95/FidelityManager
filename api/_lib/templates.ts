@@ -1,12 +1,37 @@
-import { adminDb } from "./firebase.js";
+import { adminDb } from "./firebase.js"; 
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const AUTOMATIONS_FILE =
   process.env.AUTOMATIONS_FILE_PATH || path.join(process.cwd(), "automations.JSON");
 
+/** Normaliza filename: acepta "1.webp" o "/Profile-Pictures/1.webp" y devuelve "1.webp" */
+function normalizeProfilePicture(input: unknown): string {
+  if (typeof input !== "string") return "1.webp";
+  const just = input.trim().replace(/^\/?Profile-Pictures\//i, "");
+  // podés validar whitelist si querés: ["1.webp","2.webp","3.webp","4.webp"]
+  return just || "1.webp";
+}
+
+/** Arma una URL consistente para el asset */
+function buildProfilePictureUrl(filename?: string): string {
+  const file = normalizeProfilePicture(filename);
+  return `/Profile-Pictures/${file}`;
+}
+
+/** Agrega variables derivadas que pueden usarse en las plantillas */
+function enrichVars(vars: Record<string, any>): Record<string, any> {
+  const v = { ...(vars || {}) };
+  // Calculadas para avatar
+  const normalized = normalizeProfilePicture(v.profilePicture);
+  v.profilePicture = normalized;
+  v.profilePictureUrl = v.profilePictureUrl || buildProfilePictureUrl(normalized);
+  return v;
+}
+
 export function renderTemplate(tpl: string, vars: Record<string, any>) {
-  return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) => (vars?.[k] ?? "").toString());
+  const ctx = enrichVars(vars);
+  return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) => (ctx?.[k] ?? "").toString());
 }
 
 async function readAutomationsFile(): Promise<any> {
