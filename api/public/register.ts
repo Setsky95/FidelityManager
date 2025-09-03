@@ -12,6 +12,14 @@ const ALLOWED_PROFILE_PICTURES = [
   "https://imgfz.com/i/ifsrEgV.jpeg",
   "https://imgfz.com/i/mD5KnXZ.jpeg",
 ] as const;
+
+function normalizeProfilePicture(input: unknown): string {
+  const FALLBACK = "https://imgfz.com/i/rIbPLBA.jpeg";
+  if (typeof input !== "string") return FALLBACK;
+  const url = input.trim();
+  return ALLOWED_PROFILE_PICTURES.has(url) ? url : FALLBACK;
+}
+
 const ALLOWED_SET = new Set(ALLOWED_PROFILE_PICTURES);
 const DEFAULT_PIC = ALLOWED_PROFILE_PICTURES[0];
 
