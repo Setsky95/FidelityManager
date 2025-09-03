@@ -8,49 +8,61 @@ const emailNormalized = z
   .toLowerCase()
   .email("Email inválido");
 
+/** Coerce date: acepta Date o string ISO y lo convierte a Date */
+const zCoerceDate = z.preprocess((v) => {
+  if (v instanceof Date) return v;
+  if (typeof v === "string") return new Date(v);
+  return v;
+}, z.date());
+
 /* ========= Members ========= */
 
 export const memberSchema = z.object({
-  id: z.string(),
+  id: z.string(),                                   // "VG123"
+  numero: z.number().int().nonnegative(),           // correlativo 123
   nombre: nonEmpty("El nombre es requerido"),
   apellido: nonEmpty("El apellido es requerido"),
   email: emailNormalized,
   puntos: z.number().min(0, "Los puntos no pueden ser negativos").default(0),
-  fechaRegistro: z.date().default(() => new Date()),
+  profilePicture: z.string().url().nullable().optional(), // URL absoluta o null
+  fechaRegistro: zCoerceDate.default(() => new Date()),
 });
+
+export type Member = z.infer<typeof memberSchema>;
 
 export const insertMemberSchema = memberSchema.omit({
   id: true,
   fechaRegistro: true,
 });
+export type InsertMember = z.infer<typeof insertMemberSchema>;
+
+/* ========= Auth (Login) ========= */
 
 export const loginSchema = z.object({
-  email: z.string().trim().email("Email inválido"),
+  email: emailNormalized,
   password: z.string().min(8, "Mínimo 8 caracteres").max(72),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
-/**
- * 👇 NUEVO: registro público (sin 'puntos', siempre 0 en el server)
- * Usalo en la vista /sumate y en el endpoint /api/public/register
- */
+/* ========= Registro público =========
+   Usalo en /sumate y /api/public/register
+*/
 export const publicRegisterSchema = z.object({
   nombre: z.string().min(1),
   apellido: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  profilePicture: z.enum(["1.jpg", "2.jpg", "3.jpg", "4.jpg"]), 
+  profilePicture: z.string().url(), // URL absoluta (CRC externo)
 });
 export type PublicRegister = z.infer<typeof publicRegisterSchema>;
+
+/* ========= Puntos ========= */
 
 export const updatePointsSchema = z.object({
   operation: z.enum(["add", "subtract", "set"]),
   amount: z.number().min(0, "La cantidad debe ser positiva"),
   reason: z.string().optional(),
 });
-
-export type Member = z.infer<typeof memberSchema>;
-export type InsertMember = z.infer<typeof insertMemberSchema>;
 export type UpdatePoints = z.infer<typeof updatePointsSchema>;
 
 export interface MemberStats {

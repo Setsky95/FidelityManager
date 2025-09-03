@@ -22,10 +22,10 @@ const LOADING_GIF = "cargando...";
 
 // 👇 opciones disponibles (coinciden con /Profile-Pictures)
 const PROFILE_PICTURES = [
-  { id: "1.jpg", src: "/Profile-Pictures/1.jpg", label: "1" },
-  { id: "2.jpg", src: "/Profile-Pictures/2.jpg", label: "2" },
-  { id: "3.jpg", src: "/Profile-Pictures/3.jpg", label: "3" },
-  { id: "4.jpg", src: "/Profile-Pictures/4.jpg", label: "4" },
+  { id: "https://imgfz.com/i/rIbPLBA.jpeg", src: "https://imgfz.com/i/rIbPLBA.jpeg", label: "1" },
+  { id: "https://imgfz.com/i/k6rqewz.jpeg", src: "https://imgfz.com/i/k6rqewz.jpeg", label: "2" },
+  { id: "https://imgfz.com/i/ifsrEgV.jpeg", src: "https://imgfz.com/i/ifsrEgV.jpeg", label: "3" },
+  { id: "https://imgfz.com/i/mD5KnXZ.jpeg", src: "https://imgfz.com/i/mD5KnXZ.jpeg", label: "4" },
 ];
 
 export default function SumatePage() {

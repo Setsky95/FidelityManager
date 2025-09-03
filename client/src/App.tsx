@@ -8,18 +8,18 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AuthProvider } from "@/providers/AuthProvider";
 import { PrivateRoute } from "@/components/PrivateRoute";
-import { BurgerMenu } from "./components/burgerMenu.jsx";
 import { Sidebar } from "@/components/sidebar";
 import Dashboard from "@/pages/dashboard";
 import Members from "@/pages/members";
 import Reports from "@/pages/reports";
-import SignIn from "@/pages/sign-in";       // <- si querés mantener esta ruta pública
-import NotFound from "@/pages/not-found";   // <- usalo como 404
+import SignIn from "@/pages/sign-in";       // opcional
+import NotFound from "@/pages/not-found";
 import Automations from "@/pages/automations";
 import SumatePage from "@/pages/SumatePage";
 import Listas from "@/pages/lists";
-import HomePage from "@/pages/homePage";    // <- asegurate que exporte `default function HomePage() { ... }`
+import HomePage from "@/pages/homePage";
 import LoginPage from "@/pages/loginPage";
+import SubscriberDashboard from "@/pages/subscriber-dashboard"; // 👈 nuevo
 
 function ProtectedArea() {
   return (
@@ -47,18 +47,25 @@ export default function App() {
           <Switch>
             {/* Públicas */}
             <Route path="/login" component={LoginPage} />
-            <Route path="/sign-in" component={SignIn} />   {/* opcional; podés borrar si no lo usás */}
+            <Route path="/sign-in" component={SignIn} />
             <Route path="/sumate" component={SumatePage} />
             <Route path="/" component={HomePage} />
 
-            {/* Protegidas: catch-all después de las públicas */}
+            {/* Privada de SUSCRIPTOR */}
+            <Route path="/mi-cuenta">
+              <PrivateRoute>
+                <SubscriberDashboard />
+              </PrivateRoute>
+            </Route>
+
+            {/* Área admin protegida (catch-all después de las públicas y del dashboard de suscriptor) */}
             <Route>
               <PrivateRoute>
                 <ProtectedArea />
               </PrivateRoute>
             </Route>
 
-            {/* 404 final */}
+            {/* 404 final (por si algo se escapa) */}
             <Route component={NotFound} />
           </Switch>
 
