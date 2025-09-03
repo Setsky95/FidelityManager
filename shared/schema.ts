@@ -39,7 +39,7 @@ export const publicRegisterSchema = z.object({
   apellido: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  profilePicture: z.enum(["1.webp", "2.webp", "3.webp", "4.webp"]), // nuevo
+  profilePicture: z.enum(["1.jpg", "2.jpg", "3.jpg", "4.jpg"]), 
 });
 export type PublicRegister = z.infer<typeof publicRegisterSchema>;
 
