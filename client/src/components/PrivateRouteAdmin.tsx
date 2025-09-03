@@ -1,15 +1,22 @@
-// src/components/PrivateRouteAdmin.tsx
+// client/src/components/PrivateRouteAdmin.tsx
+import * as React from "react";
 import { Redirect } from "wouter";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAdminAuth } from "@/providers/AdminAuthProvider";
 
-export default function PrivateRouteAdmin({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+export function PrivateRouteAdmin({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAdminAuth();
 
   if (loading) {
-    // Gate: mientras carga, no tomar decisiones de ruta
-    return <div className="min-h-screen grid place-items-center text-white bg-neutral-950">Cargando…</div>;
+    return (
+      <div className="min-h-screen grid place-items-center text-white bg-neutral-950">
+        Cargando…
+      </div>
+    );
   }
 
-  if (!user) return <Redirect to="/admin-login" />;
+  if (!user) {
+    return <Redirect to="/admin-login" />;
+  }
+
   return <>{children}</>;
 }
