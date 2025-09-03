@@ -13,10 +13,29 @@ function normalizeProfilePicture(input: unknown): string {
   return just || "1.webp";
 }
 
-/** Arma una URL consistente para el asset */
+/** Obtiene el dominio público (absoluto) para armar URLs en emails */
+function getPublicBaseUrl(): string {
+  // Prioridad: PUBLIC_BASE_URL (setear en Vercel) > VERCEL_PROJECT_PRODUCTION_URL > VERCEL_URL
+  let base =
+    process.env.PUBLIC_BASE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    "";
+
+  // Si viene sin protocolo (p.ej. myapp.vercel.app), prepende https://
+  if (base && !/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
+  }
+  // sin barra al final
+  return base.replace(/\/+$/g, "");
+}
+
+/** Arma una URL consistente para el asset (absoluta si hay dominio) */
 function buildProfilePictureUrl(filename?: string): string {
   const file = normalizeProfilePicture(filename);
-  return `/Profile-Pictures/${file}`;
+  const base = getPublicBaseUrl();
+  // Si hay dominio, devolvé absoluta. Si no, relativa (sirve en web, NO en emails).
+  return base ? `${base}/Profile-Pictures/${file}` : `/Profile-Pictures/${file}`;
 }
 
 /** Agrega variables derivadas que pueden usarse en las plantillas */
@@ -25,6 +44,7 @@ function enrichVars(vars: Record<string, any>): Record<string, any> {
   // Calculadas para avatar
   const normalized = normalizeProfilePicture(v.profilePicture);
   v.profilePicture = normalized;
+  // Siempre ofrecé la absoluta (ideal para emails). Si ya vino una, respetala.
   v.profilePictureUrl = v.profilePictureUrl || buildProfilePictureUrl(normalized);
   return v;
 }
@@ -85,3 +105,4 @@ export async function getTemplateByKey(key: string) {
     enabled: true,
   };
 }
+
