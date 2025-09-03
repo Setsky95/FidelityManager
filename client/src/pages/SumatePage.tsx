@@ -22,10 +22,10 @@ const LOADING_GIF = "cargando...";
 
 // 👇 opciones disponibles (coinciden con /Profile-Pictures)
 const PROFILE_PICTURES = [
-  { id: "1.webp", src: "/Profile-Pictures/1.webp", label: "1" },
-  { id: "2.webp", src: "/Profile-Pictures/2.webp", label: "2" },
-  { id: "3.webp", src: "/Profile-Pictures/3.webp", label: "3" },
-  { id: "4.webp", src: "/Profile-Pictures/4.webp", label: "4" },
+  { id: "1.jpg", src: "/Profile-Pictures/1.jpg", label: "1" },
+  { id: "2.jpg", src: "/Profile-Pictures/2.jpg", label: "2" },
+  { id: "3.jpg", src: "/Profile-Pictures/3.jpg", label: "3" },
+  { id: "4.jpg", src: "/Profile-Pictures/4.jpg", label: "4" },
 ];
 
 export default function SumatePage() {

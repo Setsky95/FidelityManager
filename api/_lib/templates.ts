@@ -29,10 +29,10 @@ function resolveAutomationsFilePath(): string[] {
 
 /** Normaliza filename: acepta "1.webp" o "/Profile-Pictures/1.webp" y devuelve "1.webp" */
 function normalizeProfilePicture(input: unknown): string {
-  if (typeof input !== "string") return "1.webp";
+  if (typeof input !== "string") return "1.jpg";
   const just = input.trim().replace(/^\/?Profile-Pictures\//i, "");
   // Podrías validar whitelist aquí: ["1.webp","2.webp","3.webp","4.webp"]
-  return just || "1.webp";
+  return just || "1.jpg";
 }
 
 /** Obtiene el dominio público (absoluto) para armar URLs en emails */

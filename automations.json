@@ -4,7 +4,7 @@
     "to": "",
     "from": "sebapavlotsky@gmail.com",
     "subject": "¡Bienvenido/a, {{nombre}}!",
-    "body": "<h1>Hola {{nombre}}</h1><p>Tu ID es {{id}}</p>"
+    "body": "<h1>Hola {{nombre}}BUEvvvvvvvvdddddddddddddvvvvvvvddddddddsssssdddddddvvvvvNAS!</h1><p>Tu ID es {{id}}</p>"
   },
   "pointsAddEmail": {
     "enabled": false,
