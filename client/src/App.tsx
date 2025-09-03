@@ -24,11 +24,11 @@ import Listas from "@/pages/lists";
 import HomePage from "@/pages/homePage";
 import LoginPage from "@/pages/loginPage";
 import SubscriberDashboard from "@/pages/subscriber-dashboard";
-import Campaigns from "@/pages/campaigns.tsx";
+import Campaigns from "@/pages/campaigns"; // 👈 sin extensión
 
 function ProtectedAdminArea() {
   return (
-    <div className="flex h-screen bg-surface " data-testid="app-layout">
+    <div className="flex h-screen bg-surface" data-testid="app-layout">
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Switch>
@@ -38,7 +38,6 @@ function ProtectedAdminArea() {
           <Route path="/automations" component={Automations} />
           <Route path="/listas" component={Listas} />
           <Route path="/campaigns" component={Campaigns} />
-
           <Route component={NotFound} />
         </Switch>
       </div>
@@ -50,12 +49,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {/* Suscriptor: Provider a nivel app (lo podés mover si preferís) */}
+        {/* Contexto de SOCIO a nivel app */}
         <SubAuthProvider>
           <Switch>
             {/* Públicas */}
-                    <Route path="/admin-login" component={AdminLoginPage} />
-
+            <Route path="/admin-login" component={AdminLoginPage} />
             <Route path="/login" component={LoginPage} />
             <Route path="/sign-in" component={SignIn} />
             <Route path="/sumate" component={SumatePage} />
@@ -68,7 +66,7 @@ export default function App() {
               </PrivateRouteSubscriber>
             </Route>
 
-            {/* Área admin protegida (envuelta con su propio provider de Firebase) */}
+            {/* Área ADMIN protegida (envuelta con su propio provider) */}
             <Route>
               <AdminAuthProvider>
                 <PrivateRouteAdmin>
