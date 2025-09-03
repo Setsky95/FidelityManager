@@ -1,4 +1,3 @@
-// src/providers/AuthProvider.tsx
 import * as React from "react";
 
 type Member = {
@@ -20,7 +19,7 @@ type AuthCtx = {
   refresh: () => Promise<void>;
 };
 
-const Ctx = React.createContext<AuthCtx>(null as any);
+const Ctx = React.createContext<AuthCtx>({} as any);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<Member | null>(null);
