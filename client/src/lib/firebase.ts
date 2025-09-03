@@ -14,10 +14,9 @@ import {
   limit as qlimit,
   getDoc,
   setDoc,
-    startAfter as qstartAfter,
-    documentId,
-    deleteDoc,
-
+  startAfter as qstartAfter,
+  documentId,
+  deleteDoc,
 } from "firebase/firestore";
 import {
   getAuth,
@@ -38,39 +37,23 @@ import type {
   UpdatePoints,
   Movement,
   MovementType,
-  // ⛔️ ojo: no existe un tipo "listas" en @shared/schema, lo removemos
 } from "@shared/schema";
 
 /* =========================
    Firebase App
    ========================= */
 const firebaseConfig = {
-  apiKey:
-    import.meta.env.VITE_FIREBASE_API_KEY ||
-    "AIzaSyDPFm6xzL0SRszPDavXagRoTmU7cR0iVJM",
-  authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
-    "vangogh-fidelidad.firebaseapp.com",
-  projectId:
-    import.meta.env.VITE_FIREBASE_PROJECT_ID || "vangogh-fidelidad",
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
-    "vangogh-fidelidad.firebasestorage.app",
-  messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "522012084948",
-  appId:
-    import.meta.env.VITE_FIREBASE_APP_ID ||
-    "1:522012084948:web:cf86a6cb6ee22910f38941",
-  measurementId:
-    import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-8X5SLWNQGC",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDPFm6xzL0SRszPDavXagRoTmU7cR0iVJM",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "vangogh-fidelidad.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "vangogh-fidelidad",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "vangogh-fidelidad.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "522012084948",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:522012084948:web:cf86a6cb6ee22910f38941",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-8X5SLWNQGC",
 };
 
 export const app = initializeApp(firebaseConfig);
-try {
-  getAnalytics(app);
-} catch {
-  /* evita error en SSR/Node */
-}
+try { getAnalytics(app); } catch { /* evita error en SSR/Node */ }
 
 /* =========================
    Firestore
@@ -90,44 +73,47 @@ export type ListDoc = {
   Ids: string;
 };
 
-
 /* =========================
    Auth (Google)
    ========================= */
 export const auth = getAuth(app);
 
-// Persistencia en el navegador
+// Persistencia en el navegador (no romper si falla en SSR)
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 // Proveedor Google
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-// Helpers de auth
+// Helpers de auth (opcionales)
 export async function signInWithGoogle(): Promise<User> {
   const res = await signInWithPopup(auth, googleProvider);
   return res.user;
 }
+export async function signOutUser() { await signOut(auth); }
 
-export async function signOutUser() {
-  await signOut(auth);
-}
-
-// Re-export convenientes
-export { onAuthStateChanged };
+// Re-exports que usa el AuthProvider (IMPORTANTE)
+export {
+  GoogleAuthProvider,
+  signInWithPopup,
+  setPersistence,
+  browserLocalPersistence,
+  onAuthStateChanged,
+  signOut,
+};
 export type { User };
 
 /* =========================
    Functions (region)
    ========================= */
-export const functions = getFunctions(app, "us-central1"); // ajustá si tus Functions están en otra región
+export const functions = getFunctions(app, "us-central1");
 
 /* =========================
    Utils
    ========================= */
 function toDateSafe(value: any): Date | null {
-  if (value && typeof value.toDate === "function") return value.toDate(); // Timestamp
-  if (value instanceof Date && !isNaN(value.getTime())) return value; // Date nativa
+  if (value && typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
   return null;
 }
 
@@ -154,17 +140,13 @@ function setLogTx(
    Servicio
    ========================= */
 export class FirebaseService {
-
-   /** Trae socios por un conjunto de IDs (chunk de 10 para cumplir el límite de Firestore). */
+  /** Trae socios por IDs (en chunks de 10 por límite de Firestore). */
   static async getMembersByIds(ids: string[]): Promise<Member[]> {
     const clean = (ids ?? []).map((x) => x.trim()).filter(Boolean);
     if (clean.length === 0) return [];
 
-    // dividir en lotes de 10
     const chunks: string[][] = [];
-    for (let i = 0; i < clean.length; i += 10) {
-      chunks.push(clean.slice(i, i + 10));
-    }
+    for (let i = 0; i < clean.length; i += 10) chunks.push(clean.slice(i, i + 10));
 
     const results: Member[] = [];
     for (const group of chunks) {
@@ -183,31 +165,21 @@ export class FirebaseService {
       });
     }
 
-    // ordenar como el orden original de ids
     const orderMap = new Map(clean.map((id, idx) => [id, idx]));
-    results.sort(
-      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0)
-    );
-
+    results.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     return results;
   }
-  /** Lista de socios ordenados por número correlativo (VG1, VG2, …) */
-  /** Paginado: trae miembros ordenados por 'numero' en tandas */
+
+  /** Paginado ordenado por 'numero'. */
   static async getMembersPage(opts: {
     limit: number;
-    /** cursor: último 'numero' recibido en la página anterior */
     startAfterNumero?: number | null;
   }): Promise<{ items: Member[]; nextCursor: number | null }> {
     const { limit, startAfterNumero } = opts;
-
     const constraints: any[] = [orderBy("numero", "asc"), qlimit(limit)];
-    if (typeof startAfterNumero === "number") {
-      // con un solo orderBy, se puede pasar el valor del campo
-      constraints.push(qstartAfter(startAfterNumero));
-    }
+    if (typeof startAfterNumero === "number") constraints.push(qstartAfter(startAfterNumero));
 
     const snap = await getDocs(query(membersCollection, ...constraints));
-
     const items: Member[] = snap.docs.map((d) => {
       const data: any = d.data();
       const fecha = toDateSafe(data?.fechaRegistro);
@@ -233,29 +205,23 @@ export class FirebaseService {
   static async getMembers(): Promise<Member[]> {
     const qMembers = query(membersCollection, orderBy("numero", "asc"));
     const snapshot = await getDocs(qMembers);
-
     return snapshot.docs.map((d) => {
       const data = d.data() as any;
       const fecha = toDateSafe(data?.fechaRegistro);
-
       return {
         id: d.id,
         nombre: data.nombre,
         apellido: data.apellido,
         email: data.email,
         puntos: Number(data.puntos ?? 0),
-        fechaRegistro: fecha ?? new Date(0), // si falta, no cuenta como “nuevo del mes”
+        fechaRegistro: fecha ?? new Date(0),
       } as Member;
     });
   }
 
-  /**
-   * Alta con ID correlativo VG{n} usando transacción atómica
-   * + log de creación.
-   */
+  /** Alta con ID correlativo VG{n} + log. */
   static async addMember(member: InsertMember): Promise<string> {
     const newId = await runTransaction(db, async (tx) => {
-      // 1) secuencia
       const seqRef = doc(db, "meta", "sequences");
       const seqSnap = await tx.get(seqRef);
 
@@ -269,10 +235,8 @@ export class FirebaseService {
         tx.update(seqRef, { membersNext: current + 1 });
       }
 
-      // 2) crear socio
       const memberId = `VG${next}`;
       const ref = doc(db, "suscriptores", memberId);
-
       const clean = {
         nombre: member.nombre.trim(),
         apellido: member.apellido.trim(),
@@ -287,7 +251,6 @@ export class FirebaseService {
         fechaRegistro: serverTimestamp(),
       });
 
-      // 3) log "create"
       setLogTx(tx, {
         memberId,
         memberIdNumber: next,
@@ -303,23 +266,19 @@ export class FirebaseService {
       return memberId;
     });
 
-    return newId; // p.ej. "VG123"
+    return newId;
   }
 
-    /** Borra un documento de la colección `listas` por id */
+  /** Borra una lista. */
   static async deleteList(listId: string): Promise<void> {
     const ref = doc(listsCollection, listId);
     await deleteDoc(ref);
   }
 
-
-  /**
-   * Actualiza puntos en transacción atómica (lee estado real)
-   * + log del movimiento correspondiente.
-   */
+  /** Update de puntos + log. */
   static async updateMemberPoints(
     memberId: string,
-    _currentPoints: number, // se ignora; se lee en la transacción
+    _currentPoints: number,
     update: UpdatePoints
   ): Promise<void> {
     await runTransaction(db, async (tx) => {
@@ -350,14 +309,12 @@ export class FirebaseService {
         throw new Error("Operación inválida");
       }
 
-      // 1) actualizar socio
       tx.update(ref, {
         puntos: nextPoints,
         ultimaActualizacion: serverTimestamp(),
         ...(update.reason && { ultimoMotivo: update.reason }),
       });
 
-      // 2) log del cambio
       setLogTx(tx, {
         memberId,
         memberIdNumber: data?.numero,
@@ -372,7 +329,7 @@ export class FirebaseService {
     });
   }
 
-  /** Elimina un socio y registra log de "delete" en la misma transacción */
+  /** Elimina socio + log. */
   static async deleteMember(memberId: string): Promise<void> {
     await runTransaction(db, async (tx) => {
       const ref = doc(db, "suscriptores", memberId);
@@ -380,11 +337,8 @@ export class FirebaseService {
       if (!snap.exists()) return;
 
       const data: any = snap.data();
-
-      // 1) borrar socio
       tx.delete(ref);
 
-      // 2) log de borrado
       setLogTx(tx, {
         memberId,
         memberIdNumber: data?.numero,
@@ -399,10 +353,7 @@ export class FirebaseService {
     });
   }
 
-  /**
-   * Lee movimientos (logs) con filtros opcionales.
-   * Si falta un índice compuesto, hace fallback: carga por fecha y filtra en cliente.
-   */
+  /** Lectura de logs con filtros, con fallback si falta índice. */
   static async getMovements(opts: {
     memberId?: string;
     type?: MovementType;
@@ -441,11 +392,7 @@ export class FirebaseService {
 
       if (isIndexIssue) {
         console.warn("[getMovements] Falta índice. Fallback en cliente.", err);
-        const qAll = query(
-          logsCollection,
-          orderBy("createdAt", "desc"),
-          qlimit(limit)
-        );
+        const qAll = query(logsCollection, orderBy("createdAt", "desc"), qlimit(limit));
         const snap = await getDocs(qAll);
         let items = snap.docs.map((d) => {
           const data: any = d.data();
@@ -465,7 +412,7 @@ export class FirebaseService {
     }
   }
 
-  /** Stats robustos calculados en cliente */
+  /** Stats calculados en cliente. */
   static async getMemberStats(): Promise<{
     totalMembers: number;
     totalPoints: number;
@@ -482,7 +429,6 @@ export class FirebaseService {
 
     snap.forEach((d) => {
       const data: any = d.data();
-
       const puntos = Number(data?.puntos ?? 0);
       totalPoints += isNaN(puntos) ? 0 : puntos;
 
@@ -491,14 +437,11 @@ export class FirebaseService {
     });
 
     const totalMembers = snap.size;
-    const averagePoints =
-      totalMembers > 0 ? Math.round(totalPoints / totalMembers) : 0;
-
+    const averagePoints = totalMembers > 0 ? Math.round(totalPoints / totalMembers) : 0;
     return { totalMembers, totalPoints, newThisMonth, averagePoints };
   }
 
   /* ========= Automations (settings + test) ========= */
-
   static async getAutomationSettings(): Promise<any> {
     const ref = doc(db, "settings", "automations");
     const snap = await getDoc(ref);
@@ -519,25 +462,17 @@ export class FirebaseService {
   }
 
   /* ========= Listas ========= */
-
-  /** Trae todas las listas (colección `listas`) */
   static async getLists(): Promise<ListDoc[]> {
-    // si querés ordenar por nombre:
     const qLists = query(listsCollection, orderBy("nombre", "asc"));
     const snap = await getDocs(qLists);
     return snap.docs.map((d) => {
       const data = d.data() as any;
-      return {
-        id: d.id,
-        nombre: String(data?.nombre ?? ""),
-        Ids: String(data?.Ids ?? ""),
-      };
+      return { id: d.id, nombre: String(data?.nombre ?? ""), Ids: String(data?.Ids ?? "") };
     });
   }
 
-  /** Crea una lista nueva con nombre e IDs de socios */
   static async createList(nombre: string, ids: string[]): Promise<string> {
-    const ref = doc(listsCollection); // id auto
+    const ref = doc(listsCollection);
     await setDoc(ref, {
       nombre: nombre.trim(),
       Ids: (ids ?? []).join(","),
