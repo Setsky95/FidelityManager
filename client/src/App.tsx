@@ -6,22 +6,25 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { AuthProvider } from "@/providers/AuthProvider";
-import { PrivateRoute } from "@/components/PrivateRoute";
+import { PrivateRouteSubscriber } from "@/components/PrivateRouteSubscriber";
+import { PrivateRouteAdmin } from "@/components/PrivateRouteAdmin";
+import { SubAuthProvider } from "@/providers/SubAuthProvider";
+import { AdminAuthProvider } from "@/providers/AdminAuthProvider";
+
 import { Sidebar } from "@/components/sidebar";
 import Dashboard from "@/pages/dashboard";
 import Members from "@/pages/members";
 import Reports from "@/pages/reports";
-import SignIn from "@/pages/sign-in";       // opcional
+import SignIn from "@/pages/sign-in";
 import NotFound from "@/pages/not-found";
 import Automations from "@/pages/automations";
 import SumatePage from "@/pages/SumatePage";
 import Listas from "@/pages/lists";
 import HomePage from "@/pages/homePage";
 import LoginPage from "@/pages/loginPage";
-import SubscriberDashboard from "@/pages/subscriber-dashboard"; // 👈 nuevo
+import SubscriberDashboard from "@/pages/subscriber-dashboard";
 
-function ProtectedArea() {
+function ProtectedAdminArea() {
   return (
     <div className="flex h-screen bg-surface " data-testid="app-layout">
       <Sidebar />
@@ -43,7 +46,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
+        {/* Suscriptor: Provider a nivel app (lo podés mover si preferís) */}
+        <SubAuthProvider>
           <Switch>
             {/* Públicas */}
             <Route path="/login" component={LoginPage} />
@@ -53,24 +57,26 @@ export default function App() {
 
             {/* Privada de SUSCRIPTOR */}
             <Route path="/mi-cuenta">
-              <PrivateRoute>
+              <PrivateRouteSubscriber>
                 <SubscriberDashboard />
-              </PrivateRoute>
+              </PrivateRouteSubscriber>
             </Route>
 
-            {/* Área admin protegida (catch-all después de las públicas y del dashboard de suscriptor) */}
+            {/* Área admin protegida (envuelta con su propio provider de Firebase) */}
             <Route>
-              <PrivateRoute>
-                <ProtectedArea />
-              </PrivateRoute>
+              <AdminAuthProvider>
+                <PrivateRouteAdmin>
+                  <ProtectedAdminArea />
+                </PrivateRouteAdmin>
+              </AdminAuthProvider>
             </Route>
 
-            {/* 404 final (por si algo se escapa) */}
+            {/* 404 final */}
             <Route component={NotFound} />
           </Switch>
 
           <Toaster />
-        </AuthProvider>
+        </SubAuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

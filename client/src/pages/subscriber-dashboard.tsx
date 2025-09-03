@@ -1,9 +1,9 @@
 import * as React from "react";
-import { useAuth } from "@/providers/AuthProvider";
+import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Button } from "@/components/ui/button";
 
 export default function SubscriberDashboard() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout } = useSubAuth();
 
   if (loading) {
     return (
@@ -47,9 +47,7 @@ export default function SubscriberDashboard() {
               {user.puntos ?? 0}
             </span>
           </p>
-          <p className="text-sm text-neutral-400">
-            ID de socio: {user.id}
-          </p>
+          <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>
 
         <div className="mt-6">

@@ -1,11 +1,11 @@
 import * as React from "react";
 import { useLocation, Link } from "wouter";
-import { useAuth } from "@/providers/AuthProvider";
+import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
-  const { login, loading, user } = useAuth();
+  const { login, loading, user } = useSubAuth();
   const [, navigate] = useLocation();
 
   const [email, setEmail] = React.useState("");
