@@ -24,7 +24,6 @@ import Listas from "@/pages/lists";
 import HomePage from "@/pages/homePage";
 import LoginPage from "@/pages/loginPage";
 import SubscriberDashboard from "@/pages/subscriber-dashboard";
-import Campaigns from "@/pages/campaigns"; // 👈 sin extensión
 
 function ProtectedAdminArea() {
   return (
@@ -37,7 +36,6 @@ function ProtectedAdminArea() {
           <Route path="/reports" component={Reports} />
           <Route path="/automations" component={Automations} />
           <Route path="/listas" component={Listas} />
-          <Route path="/campaigns" component={Campaigns} />
           <Route component={NotFound} />
         </Switch>
       </div>
