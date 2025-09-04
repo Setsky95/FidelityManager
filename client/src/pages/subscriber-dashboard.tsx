@@ -3,6 +3,59 @@ import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Button } from "@/components/ui/button";
 import { claimCoupon, type Descuento } from "@/lib/coupons";
 
+/** Card de cupón con imagen placeholder y hover lindo */
+function CouponCard({
+  label,
+  disabled,
+  onClick,
+  loading,
+}: {
+  label: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "group relative w-40 h-44 rounded-2xl overflow-hidden",
+        "border border-white/10 bg-neutral-800/60",
+        "hover:border-white/30 hover:bg-neutral-800",
+        "transition-all duration-200",
+        "disabled:opacity-60 disabled:cursor-not-allowed",
+        "shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-white/20",
+      ].join(" ")}
+    >
+      <div className="h-24 w-full overflow-hidden">
+        <img
+          src="https://picsum.photos/400/240?blur=2"
+          alt="Cupón"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+        />
+      </div>
+
+      <div className="p-3 text-center">
+        <span className="text-xl font-extrabold tracking-wide">
+          {loading ? "Buscando…" : label}
+        </span>
+        <div className="mt-1 text-xs text-neutral-400">Descuento disponible</div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5 group-hover:ring-white/15" />
+
+      {loading && (
+        <div className="absolute inset-0 bg-black/30 grid place-items-center">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function SubscriberDashboard() {
   const { user, loading, logout } = useSubAuth();
   const [claiming, setClaiming] = React.useState<Descuento | null>(null);
@@ -16,11 +69,8 @@ export default function SubscriberDashboard() {
     setClaiming(descuento);
 
     try {
-      const res = await claimCoupon({
-        descuento,
-        userId: user.id,
-        userEmail: user.email,
-      });
+      // ✅ nueva firma: solo enviamos { descuento }
+      const res = await claimCoupon({ descuento });
 
       if (!res) {
         setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
@@ -29,6 +79,7 @@ export default function SubscriberDashboard() {
         setMensaje(`¡Listo! Te asignamos un cupón ${descuento}.`);
       }
     } catch (err: any) {
+      // opcional: si el endpoint devuelve 401, podrías redirigir al login
       setMensaje(err?.message ?? "Error al asignar el cupón.");
     } finally {
       setClaiming(null);
@@ -78,19 +129,19 @@ export default function SubscriberDashboard() {
           <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>
 
-        {/* === BOTONES DE CUPONES === */}
+        {/* === CARDS DE CUPONES === */}
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-3">Reclamar cupón</h2>
-          <div className="flex flex-wrap gap-3">
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {(["10%", "20%", "40%"] as Descuento[]).map((d) => (
-              <Button
+              <CouponCard
                 key={d}
-                variant="secondary"
+                label={d}
+                loading={claiming === d}
                 disabled={!!claiming}
                 onClick={() => onClaim(d)}
-              >
-                {claiming === d ? "Buscando…" : d}
-              </Button>
+              />
             ))}
           </div>
 
