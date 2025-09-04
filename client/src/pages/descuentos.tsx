@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { getAuth } from "firebase/auth";
 
 type Descuento = "10%" | "20%" | "40%";
 const DESCUENTOS: Descuento[] = ["10%", "20%", "40%"];
@@ -21,11 +22,22 @@ export default function DescuentosPage() {
   const [msgCosts, setMsgCosts] = React.useState<string | null>(null);
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
+  // helper: obtiene token o tira error legible
+  const getIdTokenOrThrow = React.useCallback(async () => {
+    const auth = getAuth();
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error("Debés iniciar sesión como administrador.");
+    return token;
+  }, []);
+
   // Cargar costos actuales al montar
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/coupons?action=costs", { credentials: "include" });
+        const token = await getIdTokenOrThrow();
+        const res = await fetch("/api/coupons?action=costs", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setCostos({
@@ -33,14 +45,17 @@ export default function DescuentosPage() {
             "20%": Number(data?.costPerDiscount?.["20%"] ?? 0),
             "40%": Number(data?.costPerDiscount?.["40%"] ?? 0),
           });
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setMsgCosts(err?.error || "No se pudieron cargar los costos.");
         }
-      } catch {
-        // opcional: setMsgCosts("No se pudieron cargar los costos.");
+      } catch (e: any) {
+        setMsgCosts(e?.message || "No se pudieron cargar los costos.");
       } finally {
         setLoadingCosts(false);
       }
     })();
-  }, []);
+  }, [getIdTokenOrThrow]);
 
   const createCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +68,13 @@ export default function DescuentosPage() {
 
     setCreating(true);
     try {
+      const token = await getIdTokenOrThrow();
       const res = await fetch("/api/coupons", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ action: "create", descuento: porcentaje, codigo }),
       });
 
@@ -80,10 +98,13 @@ export default function DescuentosPage() {
     setSavingCosts(true);
 
     try {
+      const token = await getIdTokenOrThrow();
       const res = await fetch("/api/coupons", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ action: "save_costs", costPerDiscount: costos }),
       });
 

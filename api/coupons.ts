@@ -1,37 +1,85 @@
 // api/coupons.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, FieldValue } from "./_lib/firebase.js";
+import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
 
 type Descuento = "10%" | "20%" | "40%";
 type Costs = { ["10%"]?: number; ["20%"]?: number; ["40%"]?: number };
 
-function getUserFromCookie(req: VercelRequest): { id: string; email: string; role?: string } | null {
-  const cookie = req.headers.cookie || "";
-  const m = cookie.match(/(?:^|;\s*)vg_session=([^;]+)/);
-  if (!m) return null;
-  const token = decodeURIComponent(m[1]);
-  const secret = process.env.JWT_SECRET;
-  if (!secret) return null;
+/* =========================
+   Auth helpers
+   ========================= */
+
+// 1) Preferimos Firebase ID Token en Authorization: Bearer <token>
+async function getUserFromBearer(req: VercelRequest) {
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice("Bearer ".length);
   try {
-    const p = jwt.verify(token, secret) as any;
-    return { id: String(p.id ?? p.userId), email: String(p.email), role: p.role };
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      id: decoded.uid,
+      email: decoded.email || "",
+      // Si tenés custom claim `admin: true`, queda disponible acá
+      isAdmin: (decoded as any).admin === true,
+      raw: decoded,
+    };
   } catch {
     return null;
   }
 }
 
+// 2) Fallback: cookie vg_session firmada con JWT_SECRET (como ya tenías)
+function getUserFromCookie(req: VercelRequest) {
+  const cookie = req.headers.cookie || "";
+  const m = cookie.match(/(?:^|;\s*)vg_session=([^;]+)/);
+  if (!m) return null;
+
+  const token = decodeURIComponent(m[1]);
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return null;
+
+  try {
+    const p = jwt.verify(token, secret) as any;
+    return {
+      id: String(p.id ?? p.userId),
+      email: String(p.email || ""),
+      // si guardaste role en el JWT, podés usarlo:
+      isAdmin: p.admin === true || p.role === "admin",
+      raw: p,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 3) Unifica: intenta Bearer y, si no, cookie
+async function getCurrentUser(req: VercelRequest) {
+  const bearer = await getUserFromBearer(req);
+  if (bearer) return bearer;
+  return getUserFromCookie(req);
+}
+
+/* =========================
+   Utils
+   ========================= */
 function sanitizeInt(n: any): number {
   const v = Number(n);
   return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
 }
 
+/* =========================
+   Handler
+   ========================= */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const user = getUserFromCookie(req);
-  if (!user /* || user.role !== "admin" */) {
+  const user = await getCurrentUser(req);
+  if (!user) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
+
+  // 👉 Si querés restringir solo a admins, descomentá esta línea:
+  // if (!user.isAdmin) { res.status(403).json({ error: "Not authorized" }); return; }
 
   // === GET ?action=costs -> leer costos ===
   if (req.method === "GET") {
