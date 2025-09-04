@@ -170,7 +170,7 @@ export default function AutomationsPage() {
           previewContext={{ threshold: local.levelUpEmail.threshold }}
         />
 
-         {/* 4) Umbral de puntos 2 */}
+         {/* 4) Umbral de puntos 2 
         <EmailAutomationCard
           idBase="levelUp2"
           title="Umbral de puntos 2"
@@ -209,7 +209,7 @@ export default function AutomationsPage() {
             </div>
           }
           previewContext={{ threshold: local.levelUpEmail2.threshold }}
-        />
+        />*/}
       </div>
     </div>
   );

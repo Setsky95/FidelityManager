@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-const PageName = "Dashboard";
+  const PageName = "Dashboard";
   const {
     members,
     isLoading: membersLoading,
@@ -58,19 +58,23 @@ const PageName = "Dashboard";
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-     <MobileNavBar pageName={PageName} />
+      <MobileNavBar pageName={PageName} />
       {/* Dashboard Content */}
       <main className="flex-1 overflow-y-auto bg-surface">
         <div className="p-6">
           {/* Stats Cards */}
           <StatsCards stats={stats} isLoading={statsLoading} />
 
-<QuickAddPoints
-  members={members}
-  onAddPoints={(memberId, amount) =>
-    updatePoints.mutateAsync({ memberId, amount, reason: "Carga rápida" })
-  }
-/>
+          <QuickAddPoints
+            members={members}
+            onAddPoints={(memberId, amount) =>
+              updatePoints.mutateAsync({
+                memberId,
+                amount,
+                reason: "Carga rápida",
+              })
+            }
+          />
           {/* Members Management Section */}
           <MembersTable
             members={members}
