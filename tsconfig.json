@@ -1,5 +1,12 @@
 {
-  "include": ["client/src", "shared", "server", "api", "guardado de apis/test-email.ts", "guardado de apis/points.ts"],
+  "include": [
+    "client/src",
+    "shared",
+    "server",
+    "api",
+    "guardado de apis/test-email.ts",
+    "guardado de apis/points.ts"
+  ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "target": "ES2022",
@@ -22,6 +29,13 @@
       "@/*": ["client/src/*"],
       "@shared/*": ["shared/*"],
       "@assets/*": ["attached_assets/*"]
-    }
+    },
+
+    /* ====== AGREGADOS ====== */
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "rootDirs": ["client/src", "api", "shared", "server"]
   }
 }

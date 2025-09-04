@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, FieldValue } from "../_lib/firebase";
+import { adminDb, FieldValue } from "../_lib/firebase.js";
 import jwt from "jsonwebtoken";
 
 type Descuento = "10%" | "20%" | "40%";
