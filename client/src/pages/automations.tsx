@@ -36,6 +36,17 @@ const DEFAULTS: AutomationsSettingsFile = {
       "<p>Tu total alcanzó <b>{{puntos}}</b> puntos (umbral: <b>{{threshold}}</b>).</p>",
     threshold: 10,
   },
+
+  levelUpEmail2: {
+    enabled: false,
+    to: "",
+    from: "Van Gogh Fidelidad <sebapavlotsky@gmail.com>",
+    subject: "¡Llegaste a {{threshold}} puntos!",
+    body:
+      "<h2>¡Felicitaciones, {{nombre}}!</h2>" +
+      "<p>Tu total alcanzó <b>{{puntos}}</b> puntos (umbral: <b>{{threshold}}</b>).</p>",
+    threshold: 30,
+  },
 };
 
 export default function AutomationsPage() {
@@ -157,6 +168,47 @@ export default function AutomationsPage() {
           }
           // 👇 Para que {{threshold}} se vea en el preview
           previewContext={{ threshold: local.levelUpEmail.threshold }}
+        />
+
+         {/* 4) Umbral de puntos 2 */}
+        <EmailAutomationCard
+          idBase="levelUp2"
+          title="Umbral de puntos 2"
+          description="Se envía cuando el socio llega o supera el segundo umbral configurado."
+          value={local.levelUpEmail2}
+          onChange={(next) => setLocal((p) => ({ ...p, levelUpEmail2: next }))}
+          onSendTest={(to, tpl) => sendTest.mutateAsync({ to, template: tpl })}
+          isTesting={sendTest.isPending}
+          helper={{
+            from: 'Formato recomendado: Nombre <no-reply@tudominio.com>',
+            body: "Placeholders: {{nombre}}, {{apellido}}, {{email}}, {{id}}, {{puntos}}, {{threshold}}",
+          }}
+          extra={
+            <div className="space-y-2">
+              <Label htmlFor="levelup2-threshold">Umbral de puntos 2</Label>
+              <Input
+                id="levelup2-threshold"
+                type="number"
+                min={1}
+                value={local.levelUpEmail2.threshold}
+                onChange={(e) =>
+                  setLocal((p) => ({
+                    ...p,
+                    levelUpEmail2: {
+                      ...p.levelUpEmail2,
+                      threshold: Math.max(1, parseInt(e.target.value || "1", 10)),
+                    },
+                  }))
+                }
+                disabled={isLoading || save.isPending}
+              />
+              <p className="text-xs text-gray-500">
+                Cuando el total de <code>{"{{puntos}}"}</code> llegue o supere este valor, se enviará el email.
+                Podés usar <code>{"{{threshold}}"}</code> en asunto/cuerpo.
+              </p>
+            </div>
+          }
+          previewContext={{ threshold: local.levelUpEmail2.threshold }}
         />
       </div>
     </div>
