@@ -6,7 +6,6 @@ import { getAuth } from "firebase/auth";
 
 /** Helper: trae costos del backend (usa Bearer si hay y cookie vg_session siempre) */
 async function fetchCosts(): Promise<Record<Descuento, number>> {
-  // si existe, agregamos idToken (admin logueado); si no, sólo cookie
   let token: string | null = null;
   try {
     const auth = getAuth();
@@ -31,7 +30,7 @@ async function fetchCosts(): Promise<Record<Descuento, number>> {
   };
 }
 
-/** Card de cupón con imagen placeholder y hover lindo */
+/** Card de cupón (sin imagen, con outline y % grande) */
 function CouponCard({
   label,
   cost,
@@ -44,7 +43,7 @@ function CouponCard({
   cost?: number;
   disabled?: boolean;
   loading?: boolean;
-  reason?: string | null; // por qué está deshabilitado (p.ej. "Te faltan 50 pts")
+  reason?: string | null;
   onClick: () => void;
 }) {
   return (
@@ -52,41 +51,31 @@ function CouponCard({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      title={reason || undefined}
       className={[
-        "group relative w-44 h-52 rounded-2xl overflow-hidden",
-        "border border-white/10 bg-neutral-800/60",
-        "hover:border-white/30 hover:bg-neutral-800",
+        "relative w-full h-48 rounded-2xl",
+        "border-2 border-white/15 bg-neutral-900/60",
+        "hover:border-white/30 hover:bg-neutral-900",
         "transition-all duration-200",
         "disabled:opacity-60 disabled:cursor-not-allowed",
         "shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-white/20",
+        "grid place-items-center px-4 text-center",
       ].join(" ")}
-      title={reason || undefined}
     >
-      <div className="h-28 w-full overflow-hidden">
-        <img
-          src="https://picsum.photos/400/240?blur=2"
-          alt="Cupón"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-          loading="lazy"
-        />
-      </div>
-
-      <div className="p-3 text-center">
-        <span className="text-xl font-extrabold tracking-wide block">
-          {loading ? "Buscando…" : label}
-        </span>
-        <div className="mt-1 text-xs text-neutral-400">
+      {/* % grande */}
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-4xl font-black tracking-tight">{label}</span>
+        <span className="text-xs text-neutral-400">
           {typeof cost === "number" ? `Cuesta ${cost} pts` : "Descuento disponible"}
-        </div>
-        {reason && (
-          <div className="mt-1 text-[11px] text-amber-400">{reason}</div>
-        )}
+        </span>
+        {reason && <span className="text-[11px] text-amber-400">{reason}</span>}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5 group-hover:ring-white/15" />
+      {/* borde interior sutil */}
+      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
 
       {loading && (
-        <div className="absolute inset-0 bg-black/30 grid place-items-center">
+        <div className="absolute inset-0 bg-black/30 grid place-items-center rounded-2xl">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
         </div>
       )}
@@ -117,7 +106,6 @@ export default function SubscriberDashboard() {
         const c = await fetchCosts();
         setCostos(c);
       } catch (e: any) {
-        // no frenamos la UI si falla; el canje igual valida en backend
         console.warn("No se pudieron cargar los costos:", e?.message);
       } finally {
         setLoadingCosts(false);
@@ -134,6 +122,7 @@ export default function SubscriberDashboard() {
     try {
       const res = await claimCoupon({ descuento });
 
+      // === casos de no éxito controlados ===
       if ((res as any)?.noAvailable) {
         setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
         return;
@@ -144,13 +133,16 @@ export default function SubscriberDashboard() {
         return;
       }
 
-// en onClaim (tras recibir res OK)
-const { codigo, newPoints, cost } = res as any;
-const resolvedCost = typeof cost === "number" ? cost : (costos[descuento] ?? 0);
+      // === éxito ===  { codigo, newPoints, cost }
+      const { codigo, newPoints, cost } = res as any;
+      const resolvedCost = typeof cost === "number" ? cost : (costos[descuento] ?? 0);
 
-setCodigoObtenido(codigo);
-if (typeof newPoints === "number") setPuntosUI(newPoints);
-setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
+      setCodigoObtenido(codigo);
+      if (typeof newPoints === "number") setPuntosUI(newPoints);
+      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
+    } catch (err: any) {
+      // cualquier error no esperado
+      setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
     } finally {
       setClaiming(null);
     }
@@ -199,70 +191,76 @@ setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos
           <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>
 
-        {/* === CARDS DE CUPONES === */}
-        <div className="mt-8">
+        {/* === Título centrado === */}
+        <div className="mt-8 text-center">
           <h2 className="text-lg font-semibold mb-2">Reclamar cupón</h2>
           {loadingCosts && (
             <p className="text-xs text-neutral-400 mb-2">Cargando costos…</p>
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(["10%", "20%", "40%"] as Descuento[]).map((d) => {
-              const cost = costos[d];
-              const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
-              const notEnough = falta > 0;
-              return (
-                <CouponCard
-                  key={d}
-                  label={d}
-                  cost={Number.isFinite(cost) ? cost : undefined}
-                  loading={claiming === d}
-                  disabled={!!claiming /* deshabilitar sólo durante operación */}
-                  // Si querés bloquear el click cuando no alcanza, cambialo a:
-                  // disabled={!!claiming || notEnough}
-                  reason={notEnough ? `Te faltan ${falta} pts` : null}
-                  onClick={() => onClaim(d)}
-                />
-              );
-            })}
-          </div>
-
-          {mensaje && <p className="mt-4 text-sm text-neutral-300">{mensaje}</p>}
-
-       {codigoObtenido && (
-  <div className="mt-2 rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
-    <p className="text-sm text-neutral-400">Tu código:</p>
-    <p className="text-xl font-mono">{codigoObtenido}</p>
-
-    <div className="flex gap-3">
-      <Button
-        variant="secondary"
-        onClick={() => {
-          navigator.clipboard.writeText(codigoObtenido);
-        }}
-      >
-        Copiar código
-      </Button>
-      <Button
-        asChild
-        variant="default"
-      >
-        <a
-          href="https://menu.vangoghburger.com.ar/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Hacer pedido
-        </a>
-      </Button>
-    </div>
-  </div>
-
-          )}
         </div>
 
-        <div className="mt-8">
-          <Button onClick={logout}>Cerrar sesión</Button>
+        {/* === Grid de cupones === */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {(["10%", "20%", "40%"] as Descuento[]).map((d) => {
+            const cost = costos[d];
+            const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
+            const notEnough = falta > 0;
+            return (
+              <CouponCard
+                key={d}
+                label={d}
+                cost={Number.isFinite(cost) ? cost : undefined}
+                loading={claiming === d}
+                disabled={!!claiming}
+                reason={notEnough ? `Te faltan ${falta} pts` : null}
+                onClick={() => onClaim(d)}
+              />
+            );
+          })}
+        </div>
+
+        {/* Mensajes y código obtenido */}
+        {mensaje && <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>}
+
+        {codigoObtenido && (
+          <div className="mt-3 mx-auto max-w-md rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
+            <p className="text-sm text-neutral-400">Tu código:</p>
+            <p className="text-xl font-mono">{codigoObtenido}</p>
+
+            <div className="flex justify-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => navigator.clipboard.writeText(codigoObtenido)}
+              >
+                Copiar código
+              </Button>
+              <Button asChild>
+                <a
+                  href="https://menu.vangoghburger.com.ar/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Hacer pedido
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Acciones centradas */}
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <Button variant="secondary" onClick={logout}>
+            Cerrar sesión
+          </Button>
+          <Button asChild>
+            <a
+              href="https://menu.vangoghburger.com.ar/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ir a la tienda
+            </a>
+          </Button>
         </div>
       </div>
     </div>
