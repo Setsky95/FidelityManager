@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, BarChart3, ClipboardClock,List } from "lucide-react";
+import { LayoutDashboard, Users, BarChart3, ClipboardClock,List,Percent } from "lucide-react";
 
 
 const navigation = [
@@ -9,7 +9,7 @@ const navigation = [
   { name: "Listas", href: "/listas", icon: List },
   { name: "Reportes", href: "/reports", icon: BarChart3 },
   { name: "Automations", href: "/automations", icon: ClipboardClock },
-  { name: "Descuentos", href: "/descuentos", icon: ClipboardClock },
+  { name: "Descuentos", href: "/descuentos", icon: Percent },
 
 
 ];

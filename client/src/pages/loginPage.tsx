@@ -77,6 +77,9 @@ export default function LoginPage() {
             Registrate
           </Link>
         </p>
+          <Link href="/" className="underline">
+            Volver al inicio
+          </Link>
       </form>
     </div>
   );

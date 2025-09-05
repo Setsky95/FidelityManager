@@ -122,7 +122,7 @@ export default function DescuentosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white p-6">
+    <div className="min-h-screen  p-6">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
         <header className="flex items-center justify-between">
@@ -133,7 +133,7 @@ export default function DescuentosPage() {
         </header>
 
         {/* Crear cupón */}
-        <section className="bg-neutral-900 rounded-2xl border border-white/10 p-6">
+        <section className=" rounded-2xl border border-white/10 p-6">
           <h2 className="text-xl font-semibold mb-4">Crear cupón</h2>
 
           <form onSubmit={createCoupon} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -142,7 +142,7 @@ export default function DescuentosPage() {
               <select
                 value={porcentaje}
                 onChange={(e) => setPorcentaje(e.target.value as Descuento)}
-                className="w-full rounded-lg bg-neutral-800 border border-white/10 px-3 py-2"
+                className="w-full rounded-lg  border border-white/10 px-3 py-2"
               >
                 {DESCUENTOS.map((d) => (
                   <option key={d} value={d}>
@@ -158,7 +158,7 @@ export default function DescuentosPage() {
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 placeholder="VG-10-ABCD1234"
-                className="w-full rounded-lg bg-neutral-800 border border-white/10 px-3 py-2"
+                className="w-full rounded-lg  border border-white/10 px-3 py-2"
               />
             </div>
 
@@ -200,7 +200,7 @@ export default function DescuentosPage() {
                       [d]: Math.max(0, Number(e.target.value || 0)),
                     }))
                   }
-                  className="w-full rounded-lg bg-neutral-800 border border-white/10 px-3 py-2"
+                  className="w-full rounded-lg  border border-white/10 px-3 py-2"
                 />
               </div>
             ))}
