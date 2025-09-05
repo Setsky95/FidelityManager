@@ -164,21 +164,18 @@ export default function DescuentosPage() {
 
             <div className="sm:col-span-3">
               <Button type="submit" disabled={creating}>
-                {creating ? "Creando…" : "Crear cupón (status: disponible)"}
+                {creating ? "Creando…" : "Crear cupón"}
               </Button>
             </div>
           </form>
 
           {msgCreate && <p className="mt-3 text-sm text-neutral-300">{msgCreate}</p>}
 
-          <p className="mt-2 text-xs text-neutral-500">
-            Al crear, se guarda: <code>status="disponible"</code> y{" "}
-            <code>disponible=true</code> automáticamente.
-          </p>
+       
         </section>
 
         {/* Costos en puntos */}
-        <section className="bg-neutral-900 rounded-2xl border border-white/10 p-6">
+        <section className=" rounded-2xl border border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Costo en puntos por descuento</h2>
             {loadingCosts && (

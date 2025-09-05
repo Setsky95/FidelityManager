@@ -144,13 +144,13 @@ export default function SubscriberDashboard() {
         return;
       }
 
-      // éxito: { codigo, newPoints, cost }
-      const { codigo, newPoints, cost } = res as any;
-      setCodigoObtenido(codigo);
-      if (typeof newPoints === "number") setPuntosUI(newPoints);
-      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${cost} puntos.`);
-    } catch (err: any) {
-      setMensaje(err?.message ?? "Error al asignar el cupón.");
+// en onClaim (tras recibir res OK)
+const { codigo, newPoints, cost } = res as any;
+const resolvedCost = typeof cost === "number" ? cost : (costos[descuento] ?? 0);
+
+setCodigoObtenido(codigo);
+if (typeof newPoints === "number") setPuntosUI(newPoints);
+setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
     } finally {
       setClaiming(null);
     }
