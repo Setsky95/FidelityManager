@@ -3,8 +3,14 @@ import { getAuth } from "firebase/auth";
 
 export type Descuento = "10%" | "20%" | "40%";
 
-export async function claimCoupon({ descuento }: { descuento: Descuento }) {
-  // Token si el usuario también está autenticado con Firebase (admin)
+type ClaimOk = { ok: true; codigo: string; newPoints: number; cost: number };
+type ClaimNoAvailable = { ok: false; reason: "no_available" };
+type ClaimInsufficient = { ok: false; reason: "insufficient_points"; need: number; have: number };
+type ClaimUnauth = { ok: false; reason: "unauthenticated" };
+type ClaimError = { ok: false; reason: "error"; message: string };
+export type ClaimResult = ClaimOk | ClaimNoAvailable | ClaimInsufficient | ClaimUnauth | ClaimError;
+
+export async function claimCoupon({ descuento }: { descuento: Descuento }): Promise<ClaimResult> {
   let token: string | null = null;
   try {
     const auth = getAuth();
@@ -14,30 +20,39 @@ export async function claimCoupon({ descuento }: { descuento: Descuento }) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch("/api/coupons", {
-    method: "POST",
-    headers,
-    credentials: "include",
-    body: JSON.stringify({ action: "claim", descuento }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/coupons", {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({ action: "claim", descuento }),
+    });
+  } catch (e: any) {
+    return { ok: false, reason: "error", message: e?.message || "Fallo de red" };
+  }
 
+  if (res.status === 401) {
+    return { ok: false, reason: "unauthenticated" };
+  }
   if (res.status === 404) {
+    // nuestro handler devuelve { error: "no_available" } con 404
     const body = await res.json().catch(() => ({}));
-    if (body?.error === "no_available") return { noAvailable: true } as const;
+    if (body?.error === "no_available") return { ok: false, reason: "no_available" };
   }
   if (res.status === 409) {
     const body = await res.json().catch(() => ({}));
     if (body?.error === "insufficient_points") {
       const need = Number(body.need ?? 0);
       const have = Number(body.have ?? 0);
-      return { insufficient: true, need, have } as const;
+      return { ok: false, reason: "insufficient_points", need, have };
     }
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error || "No se pudo reclamar el cupón.");
+    return { ok: false, reason: "error", message: err?.error || "No se pudo reclamar el cupón." };
   }
 
-  // { codigo, newPoints, cost }
-  return (await res.json()) as { codigo: string; newPoints: number; cost: number };
+  const data = await res.json();
+  return { ok: true, codigo: data.codigo, newPoints: data.newPoints, cost: data.cost };
 }
