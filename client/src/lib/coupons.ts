@@ -4,14 +4,12 @@ import { getAuth } from "firebase/auth";
 export type Descuento = "10%" | "20%" | "40%";
 
 export async function claimCoupon({ descuento }: { descuento: Descuento }) {
-  // Intentamos tomar el ID token de Firebase (admin)
+  // Token si el usuario también está autenticado con Firebase (admin)
   let token: string | null = null;
   try {
     const auth = getAuth();
     token = (await auth.currentUser?.getIdToken()) || null;
-  } catch {
-    token = null;
-  }
+  } catch { token = null; }
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -19,14 +17,27 @@ export async function claimCoupon({ descuento }: { descuento: Descuento }) {
   const res = await fetch("/api/coupons", {
     method: "POST",
     headers,
-    credentials: "include", // <-- para enviar la cookie vg_session
+    credentials: "include",
     body: JSON.stringify({ action: "claim", descuento }),
   });
 
-  if (res.status === 404) return null; // no disponible
+  if (res.status === 404) {
+    const body = await res.json().catch(() => ({}));
+    if (body?.error === "no_available") return { noAvailable: true } as const;
+  }
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}));
+    if (body?.error === "insufficient_points") {
+      const need = Number(body.need ?? 0);
+      const have = Number(body.have ?? 0);
+      return { insufficient: true, need, have } as const;
+    }
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error || "No se pudo reclamar el cupón.");
   }
-  return (await res.json()) as { codigo: string };
+
+  // { codigo, newPoints, cost }
+  return (await res.json()) as { codigo: string; newPoints: number; cost: number };
 }

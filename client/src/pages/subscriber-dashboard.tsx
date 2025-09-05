@@ -62,6 +62,10 @@ export default function SubscriberDashboard() {
   const [mensaje, setMensaje] = React.useState<string | null>(null);
   const [codigoObtenido, setCodigoObtenido] = React.useState<string | null>(null);
 
+  // puntos visibles en UI (no tocamos el provider)
+  const [puntosUI, setPuntosUI] = React.useState<number>(user?.puntos ?? 0);
+  React.useEffect(() => setPuntosUI(user?.puntos ?? 0), [user?.puntos]);
+
   const onClaim = async (descuento: Descuento) => {
     if (!user) return;
     setMensaje(null);
@@ -69,17 +73,29 @@ export default function SubscriberDashboard() {
     setClaiming(descuento);
 
     try {
-      // ✅ nueva firma: solo enviamos { descuento }
       const res = await claimCoupon({ descuento });
 
-      if (!res) {
+      // sin stock
+      if ((res as any)?.noAvailable) {
         setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
-      } else {
-        setCodigoObtenido(res.codigo);
-        setMensaje(`¡Listo! Te asignamos un cupón ${descuento}.`);
+        return;
       }
+      // puntos insuficientes
+      if ((res as any)?.insufficient) {
+        const { need, have } = res as any;
+        setMensaje(
+          `No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`
+        );
+        return;
+      }
+
+      // éxito: { codigo, newPoints, cost }
+      const { codigo, newPoints, cost } = res as any;
+      setCodigoObtenido(codigo);
+      setPuntosUI(typeof newPoints === "number" ? newPoints : puntosUI);
+      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${cost} puntos.`);
+
     } catch (err: any) {
-      // opcional: si el endpoint devuelve 401, podrías redirigir al login
       setMensaje(err?.message ?? "Error al asignar el cupón.");
     } finally {
       setClaiming(null);
@@ -124,7 +140,7 @@ export default function SubscriberDashboard() {
         <div className="mt-6">
           <p className="text-lg">
             Tus puntos:{" "}
-            <span className="font-mono text-emerald-400">{user.puntos ?? 0}</span>
+            <span className="font-mono text-emerald-400">{puntosUI ?? 0}</span>
           </p>
           <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>

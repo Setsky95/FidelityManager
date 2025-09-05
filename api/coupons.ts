@@ -112,56 +112,124 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
     const action = String(body?.action || "");
 
-        // Reclamar cupón (usuario autenticado)
-    if (action === "claim") {
-      const descuento = String(body?.descuento || "");
-      if (!["10%", "20%", "40%"].includes(descuento)) {
-        res.status(400).json({ error: "Invalid descuento" });
+// dentro del if (req.method === "POST") { ... } y del switch de action:
+if (action === "claim") {
+  const descuento = String(body?.descuento || "");
+  if (!["10%", "20%", "40%"].includes(descuento)) {
+    res.status(400).json({ error: "Invalid descuento" });
+    return;
+  }
+
+  try {
+    const result = await adminDb.runTransaction(async (tx) => {
+      // 1) Precio del cupón
+      const pricingRef = adminDb.collection("settings").doc("couponsPricing");
+      const pricingSnap = await tx.get(pricingRef);
+      const pricing = (pricingSnap.exists ? pricingSnap.data() : {}) as any;
+      const cost = Number(pricing?.costPerDiscount?.[descuento] ?? 0);
+      const costo = Number.isFinite(cost) && cost > 0 ? Math.floor(cost) : 0;
+
+      // 2) Socio (user.id = VGxx)
+      const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
+      const memberSnap = await tx.get(memberRef);
+      if (!memberSnap.exists) {
+        return { ok: false as const, reason: "member_not_found" };
+      }
+      const member = memberSnap.data() as any;
+      const prevPoints = Number(member?.puntos ?? 0);
+
+      if (prevPoints < costo) {
+        return {
+          ok: false as const,
+          reason: "insufficient_points",
+          need: costo,
+          have: prevPoints,
+        };
+      }
+
+      // 3) Un cupón disponible
+      const q = adminDb
+        .collection("cupones")
+        .where("descuento", "==", descuento)
+        .where("status", "==", "disponible")
+        .limit(1);
+      const cupSnap = await tx.get(q);
+      if (cupSnap.empty) {
+        return { ok: false as const, reason: "no_available" };
+      }
+      const cupDoc = cupSnap.docs[0];
+      const cupRef = cupDoc.ref;
+      const cupData = cupDoc.data() as any;
+
+      // 4) Actualizaciones atómicas
+      const newPoints = prevPoints - costo;
+
+      // 4a) Descontar puntos del socio
+      tx.update(memberRef, {
+        puntos: newPoints,
+        ultimaActualizacion: FieldValue.serverTimestamp(),
+        ultimoMotivo: `canje cupón ${descuento}`,
+      });
+
+      // 4b) Log de movimiento
+      const logRef = adminDb.collection("movimientos").doc();
+      tx.set(logRef, {
+        memberId: String(user.id),
+        email: user.email || null,
+        type: "points_subtract",
+        delta: -costo,
+        previousPoints: prevPoints,
+        newPoints,
+        reason: `canje cupón ${descuento}`,
+        createdAt: FieldValue.serverTimestamp(),
+        autorUid: user.id, // opcional
+      });
+
+      // 4c) Marcar cupón como usado
+      tx.update(cupRef, {
+        status: "usado",
+        usadoPor: user.id,
+        usadoEmail: user.email || null,
+        usadoAt: FieldValue.serverTimestamp(),
+      });
+
+      // 5) Respuesta
+      return { ok: true as const, codigo: String(cupData?.codigo || ""), newPoints, cost: costo };
+    });
+
+    if (!result.ok) {
+      if (result.reason === "insufficient_points") {
+        res.status(409).json({
+          error: "insufficient_points",
+          need: result.need,
+          have: result.have,
+        });
         return;
       }
-
-      try {
-        const result = await adminDb.runTransaction(async (tx) => {
-          const q = adminDb
-            .collection("cupones")
-            .where("descuento", "==", descuento)
-            .where("status", "==", "disponible")
-            .limit(1);
-
-          const snap = await tx.get(q);
-          if (snap.empty) {
-            return { ok: false as const, reason: "no_available" };
-          }
-
-          const doc = snap.docs[0];
-          const ref = doc.ref;
-          const data = doc.data() as any;
-
-          // Actualizo estado a usado
-          tx.update(ref, {
-            status: "usado",
-            usadoPor: user.id,
-            usadoEmail: user.email || null,
-            usadoAt: FieldValue.serverTimestamp(),
-          });
-
-          return { ok: true as const, codigo: String(data?.codigo || "") };
-        });
-
-        if (!result.ok) {
-          res.status(404).json({ error: "No hay cupones disponibles para ese descuento" });
-          return;
-        }
-
-        // Devuelvo el código
-        res.status(200).json({ codigo: result.codigo });
-      } catch (e: any) {
-        // Si falta índice compuesto (descuento + status), Firestore suele tirar failed-precondition
-        console.error("[POST /api/coupons claim] error", e);
-        res.status(500).json({ error: "Internal error" });
+      if (result.reason === "no_available") {
+        res.status(404).json({ error: "no_available" });
+        return;
       }
+      if (result.reason === "member_not_found") {
+        res.status(404).json({ error: "member_not_found" });
+        return;
+      }
+      res.status(400).json({ error: "bad_request" });
       return;
     }
+
+    res.status(200).json({
+      codigo: result.codigo,
+      newPoints: result.newPoints,
+      cost: result.cost,
+    });
+  } catch (e) {
+    // Si Firestore pide índice compuesto (descuento + status), crealo desde el link del error
+    console.error("[POST /api/coupons claim] error", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+  return;
+}
 
 
     // Crear cupón
