@@ -2,7 +2,7 @@
 export type Descuento = "10%" | "20%" | "40%";
 
 export async function claimCoupon({ descuento }: { descuento: Descuento }) {
-  const res = await fetch("/api/coupons/claim", {
+  const res = await fetch("/api/coupons", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include", // 🔑 envía vg_session
