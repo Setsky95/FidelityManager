@@ -3,24 +3,30 @@ import { getAuth } from "firebase/auth";
 
 export type Descuento = "10%" | "20%" | "40%";
 
-export async function claimCoupon(params: { descuento: Descuento }): Promise<{ codigo: string } | null> {
-  const auth = getAuth();
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) throw new Error("Debés iniciar sesión.");
+export async function claimCoupon({ descuento }: { descuento: Descuento }) {
+  // Intentamos tomar el ID token de Firebase (admin)
+  let token: string | null = null;
+  try {
+    const auth = getAuth();
+    token = (await auth.currentUser?.getIdToken()) || null;
+  } catch {
+    token = null;
+  }
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch("/api/coupons", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ action: "claim", descuento: params.descuento }),
+    headers,
+    credentials: "include", // <-- para enviar la cookie vg_session
+    body: JSON.stringify({ action: "claim", descuento }),
   });
 
-  if (res.status === 404) return null; // no available
+  if (res.status === 404) return null; // no disponible
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error || "No se pudo reclamar el cupón.");
   }
-  return res.json(); // { codigo }
+  return (await res.json()) as { codigo: string };
 }
