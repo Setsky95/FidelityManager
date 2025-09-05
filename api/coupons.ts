@@ -112,6 +112,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
     const action = String(body?.action || "");
 
+        // Reclamar cupón (usuario autenticado)
+    if (action === "claim") {
+      const descuento = String(body?.descuento || "");
+      if (!["10%", "20%", "40%"].includes(descuento)) {
+        res.status(400).json({ error: "Invalid descuento" });
+        return;
+      }
+
+      try {
+        const result = await adminDb.runTransaction(async (tx) => {
+          const q = adminDb
+            .collection("cupones")
+            .where("descuento", "==", descuento)
+            .where("status", "==", "disponible")
+            .limit(1);
+
+          const snap = await tx.get(q);
+          if (snap.empty) {
+            return { ok: false as const, reason: "no_available" };
+          }
+
+          const doc = snap.docs[0];
+          const ref = doc.ref;
+          const data = doc.data() as any;
+
+          // Actualizo estado a usado
+          tx.update(ref, {
+            status: "usado",
+            usadoPor: user.id,
+            usadoEmail: user.email || null,
+            usadoAt: FieldValue.serverTimestamp(),
+          });
+
+          return { ok: true as const, codigo: String(data?.codigo || "") };
+        });
+
+        if (!result.ok) {
+          res.status(404).json({ error: "No hay cupones disponibles para ese descuento" });
+          return;
+        }
+
+        // Devuelvo el código
+        res.status(200).json({ codigo: result.codigo });
+      } catch (e: any) {
+        // Si falta índice compuesto (descuento + status), Firestore suele tirar failed-precondition
+        console.error("[POST /api/coupons claim] error", e);
+        res.status(500).json({ error: "Internal error" });
+      }
+      return;
+    }
+
+
     // Crear cupón
     if (action === "create") {
       const descuento = body?.descuento as Descuento;
