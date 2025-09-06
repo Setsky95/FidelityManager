@@ -3,6 +3,7 @@ import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Button } from "@/components/ui/button";
 import { claimCoupon, type Descuento } from "@/lib/coupons";
 import { getAuth } from "firebase/auth";
+import Confetti from "react-confetti"; // 🎉 agregado
 
 /** Helper: trae costos del backend (usa Bearer si hay y cookie vg_session siempre) */
 async function fetchCosts(): Promise<Record<Descuento, number>> {
@@ -10,7 +11,9 @@ async function fetchCosts(): Promise<Record<Descuento, number>> {
   try {
     const auth = getAuth();
     token = (await auth.currentUser?.getIdToken()) || null;
-  } catch { token = null; }
+  } catch {
+    token = null;
+  }
 
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -62,7 +65,6 @@ function CouponCard({
         "grid place-items-center px-4 text-center",
       ].join(" ")}
     >
-      {/* % grande */}
       <div className="flex flex-col items-center gap-1">
         <span className="text-4xl font-black tracking-tight">{label}</span>
         <span className="text-xs text-neutral-400">
@@ -71,7 +73,6 @@ function CouponCard({
         {reason && <span className="text-[11px] text-amber-400">{reason}</span>}
       </div>
 
-      {/* borde interior sutil */}
       <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
 
       {loading && (
@@ -83,6 +84,18 @@ function CouponCard({
   );
 }
 
+/** Hook mínimo para tamaño de ventana (sin libs externas) */
+function useWindowSize() {
+  const [size, setSize] = React.useState({ width: 0, height: 0 });
+  React.useEffect(() => {
+    const update = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return size;
+}
+
 export default function SubscriberDashboard() {
   const { user, loading, logout } = useSubAuth();
 
@@ -90,13 +103,13 @@ export default function SubscriberDashboard() {
   const [mensaje, setMensaje] = React.useState<string | null>(null);
   const [codigoObtenido, setCodigoObtenido] = React.useState<string | null>(null);
 
-  // Puntos visibles en UI (no tocamos el provider)
   const [puntosUI, setPuntosUI] = React.useState<number>(user?.puntos ?? 0);
   React.useEffect(() => setPuntosUI(user?.puntos ?? 0), [user?.puntos]);
 
-  // Costos desde el backend
   const [costos, setCostos] = React.useState<Record<Descuento, number>>({
-    "10%": 0, "20%": 0, "40%": 0,
+    "10%": 0,
+    "20%": 0,
+    "40%": 0,
   });
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
@@ -113,59 +126,80 @@ export default function SubscriberDashboard() {
     })();
   }, []);
 
-const onClaim = async (descuento: Descuento) => {
-  if (!user) return;
-  setMensaje(null);
-  setCodigoObtenido(null);
-  setClaiming(descuento);
+  const onClaim = async (descuento: Descuento) => {
+    if (!user) return;
+    setMensaje(null);
+    setCodigoObtenido(null);
+    setClaiming(descuento);
 
-  try {
-    const res = await claimCoupon({ descuento });
-    // Log defensivo (podés quitarlo luego)
-    // console.debug("claimCoupon response:", res);
+    try {
+      const cost = costos[descuento];
+      if (Number.isFinite(cost) && (puntosUI ?? 0) < cost) {
+        const falta = cost - (puntosUI ?? 0);
+        setMensaje(`No te alcanzan los puntos para el ${descuento}. Te faltan ${falta}.`);
+        return;
+      }
 
-    // === Casos no exitosos controlados (según lib/coupons.ts) ===
-    if ((res as any)?.noAvailable) {
-      setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
-      return;
+      const res = await claimCoupon({ descuento });
+
+      if ((res as any)?.noAvailable) {
+        setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
+        return;
+      }
+      if ((res as any)?.insufficient) {
+        const { need, have } = res as any;
+        setMensaje(
+          `No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`
+        );
+        return;
+      }
+
+      const codigo = (res as any)?.codigo;
+      const newPoints = (res as any)?.newPoints;
+      const costFromServer = (res as any)?.cost;
+
+      if (typeof codigo !== "string" || codigo.trim().length === 0) {
+        setMensaje("No se pudo reclamar el cupón en este momento. Probá de nuevo.");
+        return;
+      }
+
+      const resolvedCost =
+        typeof costFromServer === "number" ? costFromServer : costos[descuento] ?? 0;
+
+      setCodigoObtenido(codigo);
+      if (typeof newPoints === "number") setPuntosUI(newPoints);
+      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
+    } catch (err: any) {
+      setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
+    } finally {
+      setClaiming(null);
     }
-    if ((res as any)?.insufficient) {
-      const { need, have } = res as any;
-      setMensaje(
-        `No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`
-      );
-      return;
-    }
+  };
 
-    // === Validación estricta de éxito ===
-    // Exigimos: codigo string no vacío
-    const codigo = (res as any)?.codigo;
-    const newPoints = (res as any)?.newPoints;
-    const cost = (res as any)?.cost;
+  // ===== 🎉 Aparición/Desaparición suave en 5s =====
+  const { width, height } = useWindowSize();
+  const [showConfetti, setShowConfetti] = React.useState(false);   // montado
+  const [confettiVisible, setConfettiVisible] = React.useState(false); // opacidad
+  const FADE_MS = 500; // 500ms in / 500ms out
 
-    if (typeof codigo !== "string" || codigo.trim().length === 0) {
-      // Algo raro devolvió el backend: NO mostramos éxito.
-      setMensaje("No se pudo reclamar el cupón en este momento. Probá de nuevo.");
-      return;
-    }
+  React.useEffect(() => {
+    if (!codigoObtenido) return;
 
-    // Éxito real
-    const resolvedCost =
-      typeof cost === "number" ? cost : (costos[descuento] ?? 0);
+    // Monta y hace fade-in
+    setShowConfetti(true);
+    // Permite al browser aplicar el transition
+    const tIn = setTimeout(() => setConfettiVisible(true), 0);
 
-    setCodigoObtenido(codigo);
-    if (typeof newPoints === "number") setPuntosUI(newPoints);
+    // Inicia fade-out a los 4500ms y desmonta a los 5000ms
+    const tOutStart = setTimeout(() => setConfettiVisible(false), 5000 - FADE_MS);
+    const tOutEnd = setTimeout(() => setShowConfetti(false), 5000);
 
-    setMensaje(
-      `¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`
-    );
-  } catch (err: any) {
-    setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
-  } finally {
-    setClaiming(null);
-  }
-};
-
+    return () => {
+      clearTimeout(tIn);
+      clearTimeout(tOutStart);
+      clearTimeout(tOutEnd);
+    };
+  }, [codigoObtenido]);
 
   if (loading) {
     return (
@@ -185,7 +219,26 @@ const onClaim = async (descuento: Descuento) => {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white p-6">
+      {/* 🎉 Confetti con fade-in/out y 5s de vida total */}
+      {showConfetti && (
+        <div
+          className="pointer-events-none fixed inset-0 z-50"
+          style={{
+            opacity: confettiVisible ? 1 : 0,
+            transition: `opacity ${FADE_MS}ms ease`,
+          }}
+        >
+          <Confetti
+            width={width || undefined}
+            height={height || undefined}
+            numberOfPieces={400}
+            recycle={false}
+          />
+        </div>
+      )}
+
       <div className="max-w-2xl mx-auto bg-neutral-900 rounded-2xl border border-white/10 p-6">
+        {/* Header usuario */}
         <div className="flex items-center gap-4">
           {user.profilePicture && (
             <img
@@ -202,6 +255,7 @@ const onClaim = async (descuento: Descuento) => {
           </div>
         </div>
 
+        {/* Puntos */}
         <div className="mt-6">
           <p className="text-lg">
             Tus puntos:{" "}
@@ -210,7 +264,7 @@ const onClaim = async (descuento: Descuento) => {
           <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>
 
-        {/* === Título centrado === */}
+        {/* Título */}
         <div className="mt-8 text-center">
           <h2 className="text-lg font-semibold mb-2">Reclamar cupón</h2>
           {loadingCosts && (
@@ -218,28 +272,35 @@ const onClaim = async (descuento: Descuento) => {
           )}
         </div>
 
-        {/* === Grid de cupones === */}
+        {/* Grid cupones */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {(["10%", "20%", "40%"] as Descuento[]).map((d) => {
             const cost = costos[d];
             const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
-            const notEnough = falta > 0;
+            const notEnough = Number.isFinite(cost) && falta > 0;
+            const disabled = !!claiming || loadingCosts || notEnough;
+
             return (
               <CouponCard
                 key={d}
                 label={d}
                 cost={Number.isFinite(cost) ? cost : undefined}
                 loading={claiming === d}
-                disabled={!!claiming}
+                disabled={disabled}
                 reason={notEnough ? `Te faltan ${falta} pts` : null}
-                onClick={() => onClaim(d)}
+                onClick={() => {
+                  if (disabled) return;
+                  onClaim(d);
+                }}
               />
             );
           })}
         </div>
 
-        {/* Mensajes y código obtenido */}
-        {mensaje && <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>}
+        {/* Mensajes y código */}
+        {mensaje && (
+          <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>
+        )}
 
         {codigoObtenido && (
           <div className="mt-3 mx-auto max-w-md rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
@@ -266,7 +327,7 @@ const onClaim = async (descuento: Descuento) => {
           </div>
         )}
 
-        {/* Acciones centradas */}
+        {/* Acciones */}
         <div className="mt-8 flex items-center justify-center gap-3">
           <Button variant="secondary" onClick={logout}>
             Cerrar sesión
