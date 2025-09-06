@@ -195,9 +195,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         });
 
+        // === Salidas no exitosas controladas ===
         if (!result.ok) {
           if (result.reason === "insufficient_points") {
-            res.status(409).json({ error: "insufficient_points", need: result.need, have: result.have });
+            res.status(409).json({ error: "insufficient_points", need: (result as any).need, have: (result as any).have });
             return;
           }
           if (result.reason === "no_available") {
@@ -212,10 +213,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
 
+        // === Guardas de éxito (anti “falso OK”) ===
+        const codigo = (result as any)?.codigo;
+        const newPoints = (result as any)?.newPoints;
+        const cost = (result as any)?.cost;
+
+        if (typeof codigo !== "string" || codigo.trim().length === 0) {
+          console.error("[claim] invalid success payload: codigo vacío", { result });
+          res.status(500).json({ error: "Invalid success payload (codigo)" });
+          return;
+        }
+        if (!Number.isFinite(newPoints)) {
+          console.error("[claim] invalid success payload: newPoints inválido", { result });
+          res.status(500).json({ error: "Invalid success payload (newPoints)" });
+          return;
+        }
+        if (!Number.isFinite(cost)) {
+          console.error("[claim] invalid success payload: cost inválido", { result });
+          res.status(500).json({ error: "Invalid success payload (cost)" });
+          return;
+        }
+
         res.status(200).json({
-          codigo: result.codigo,
-          newPoints: result.newPoints,
-          cost: result.cost,
+          codigo,
+          newPoints,
+          cost,
         });
       } catch (e) {
         // Si Firestore pide índice compuesto (descuento + status), crealo desde el link del error

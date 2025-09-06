@@ -113,40 +113,59 @@ export default function SubscriberDashboard() {
     })();
   }, []);
 
-  const onClaim = async (descuento: Descuento) => {
-    if (!user) return;
-    setMensaje(null);
-    setCodigoObtenido(null);
-    setClaiming(descuento);
+const onClaim = async (descuento: Descuento) => {
+  if (!user) return;
+  setMensaje(null);
+  setCodigoObtenido(null);
+  setClaiming(descuento);
 
-    try {
-      const res = await claimCoupon({ descuento });
+  try {
+    const res = await claimCoupon({ descuento });
+    // Log defensivo (podés quitarlo luego)
+    // console.debug("claimCoupon response:", res);
 
-      // === casos de no éxito controlados ===
-      if ((res as any)?.noAvailable) {
-        setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
-        return;
-      }
-      if ((res as any)?.insufficient) {
-        const { need, have } = res as any;
-        setMensaje(`No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`);
-        return;
-      }
-
-      // === éxito ===  { codigo, newPoints, cost }
-      const { codigo, newPoints, cost } = res as any;
-      const resolvedCost = typeof cost === "number" ? cost : (costos[descuento] ?? 0);
-
-      setCodigoObtenido(codigo);
-      if (typeof newPoints === "number") setPuntosUI(newPoints);
-      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
-    } catch (err: any) {
-      // cualquier error no esperado
-      setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
-    } finally {
-      setClaiming(null);
+    // === Casos no exitosos controlados (según lib/coupons.ts) ===
+    if ((res as any)?.noAvailable) {
+      setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
+      return;
     }
-  };
+    if ((res as any)?.insufficient) {
+      const { need, have } = res as any;
+      setMensaje(
+        `No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`
+      );
+      return;
+    }
+
+    // === Validación estricta de éxito ===
+    // Exigimos: codigo string no vacío
+    const codigo = (res as any)?.codigo;
+    const newPoints = (res as any)?.newPoints;
+    const cost = (res as any)?.cost;
+
+    if (typeof codigo !== "string" || codigo.trim().length === 0) {
+      // Algo raro devolvió el backend: NO mostramos éxito.
+      setMensaje("No se pudo reclamar el cupón en este momento. Probá de nuevo.");
+      return;
+    }
+
+    // Éxito real
+    const resolvedCost =
+      typeof cost === "number" ? cost : (costos[descuento] ?? 0);
+
+    setCodigoObtenido(codigo);
+    if (typeof newPoints === "number") setPuntosUI(newPoints);
+
+    setMensaje(
+      `¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`
+    );
+  } catch (err: any) {
+    setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
+  } finally {
+    setClaiming(null);
+  }
+};
+
 
   if (loading) {
     return (

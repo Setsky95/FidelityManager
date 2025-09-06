@@ -127,7 +127,7 @@ export default function DescuentosPage() {
         {/* Header */}
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Descuentos</h1>
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm ">
             Administrá cupones y el costo en puntos.
           </p>
         </header>
@@ -153,7 +153,7 @@ export default function DescuentosPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-sm text-neutral-300 mb-1">Código de cupón</label>
+              <label className="block text-sm  mb-1">Código de cupón</label>
               <input
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
@@ -169,7 +169,7 @@ export default function DescuentosPage() {
             </div>
           </form>
 
-          {msgCreate && <p className="mt-3 text-sm text-neutral-300">{msgCreate}</p>}
+          {msgCreate && <p className="mt-3 text-sm ">{msgCreate}</p>}
 
        
         </section>
@@ -179,14 +179,14 @@ export default function DescuentosPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Costo en puntos por descuento</h2>
             {loadingCosts && (
-              <span className="text-xs text-neutral-400">Cargando…</span>
+              <span className="text-xs ">Cargando…</span>
             )}
           </div>
 
           <form onSubmit={saveCosts} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {DESCUENTOS.map((d) => (
               <div key={d}>
-                <label className="block text-sm text-neutral-300 mb-1">{d}</label>
+                <label className="block text-sm  mb-1">{d}</label>
                 <input
                   type="number"
                   min={0}
@@ -209,7 +209,7 @@ export default function DescuentosPage() {
             </div>
           </form>
 
-          {msgCosts && <p className="mt-3 text-sm text-neutral-300">{msgCosts}</p>}
+          {msgCosts && <p className="mt-3 text-sm">{msgCosts}</p>}
         </section>
       </div>
     </div>
