@@ -3,7 +3,9 @@ import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Button } from "@/components/ui/button";
 import { claimCoupon, type Descuento } from "@/lib/coupons";
 import { getAuth } from "firebase/auth";
-import Confetti from "react-confetti"; // 🎉 agregado
+
+/** Lazy Confetti para evitar SSR issues */
+const LazyConfetti = React.lazy(() => import("react-confetti"));
 
 /** Helper: trae costos del backend (usa Bearer si hay y cookie vg_session siempre) */
 async function fetchCosts(): Promise<Record<Descuento, number>> {
@@ -57,10 +59,11 @@ function CouponCard({
       title={reason || undefined}
       className={[
         "relative w-full h-48 rounded-2xl",
-        "border-2 border-white/15 bg-neutral-900/60",
-        "hover:border-white/30 hover:bg-neutral-900",
+        "border-2",
+        disabled ? "border-white/10 bg-neutral-900/50" : "border-white/15 bg-neutral-900/60",
+        disabled ? "" : "hover:border-white/30 hover:bg-neutral-900",
         "transition-all duration-200",
-        "disabled:opacity-60 disabled:cursor-not-allowed",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
         "shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-white/20",
         "grid place-items-center px-4 text-center",
       ].join(" ")}
@@ -84,7 +87,7 @@ function CouponCard({
   );
 }
 
-/** Hook mínimo para tamaño de ventana (sin libs externas) */
+/** Hook mínimo para tamaño de ventana */
 function useWindowSize() {
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   React.useEffect(() => {
@@ -134,9 +137,14 @@ export default function SubscriberDashboard() {
 
     try {
       const cost = costos[descuento];
-      if (Number.isFinite(cost) && (puntosUI ?? 0) < cost) {
-        const falta = cost - (puntosUI ?? 0);
-        setMensaje(`No te alcanzan los puntos para el ${descuento}. Te faltan ${falta}.`);
+      // Guardia: si no hay costo cargado o no alcanza, no seguimos
+      if (!Number.isFinite(cost) || (puntosUI ?? 0) < cost) {
+        const falta = Number.isFinite(cost) ? cost - (puntosUI ?? 0) : 0;
+        setMensaje(
+          Number.isFinite(cost) && falta > 0
+            ? `No te alcanzan los puntos para el ${descuento}. Te faltan ${falta}.`
+            : "No se pudo validar el costo del cupón."
+        );
         return;
       }
 
@@ -148,9 +156,7 @@ export default function SubscriberDashboard() {
       }
       if ((res as any)?.insufficient) {
         const { need, have } = res as any;
-        setMensaje(
-          `No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`
-        );
+        setMensaje(`No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`);
         return;
       }
 
@@ -163,8 +169,7 @@ export default function SubscriberDashboard() {
         return;
       }
 
-      const resolvedCost =
-        typeof costFromServer === "number" ? costFromServer : costos[descuento] ?? 0;
+      const resolvedCost = typeof costFromServer === "number" ? costFromServer : costos[descuento] ?? 0;
 
       setCodigoObtenido(codigo);
       if (typeof newPoints === "number") setPuntosUI(newPoints);
@@ -176,21 +181,17 @@ export default function SubscriberDashboard() {
     }
   };
 
-  // ===== 🎉 Aparición/Desaparición suave en 5s =====
+  // ===== 🎉 Confetti con lazy load y fade =====
   const { width, height } = useWindowSize();
-  const [showConfetti, setShowConfetti] = React.useState(false);   // montado
-  const [confettiVisible, setConfettiVisible] = React.useState(false); // opacidad
-  const FADE_MS = 500; // 500ms in / 500ms out
+  const [showConfetti, setShowConfetti] = React.useState(false);
+  const [confettiVisible, setConfettiVisible] = React.useState(false);
+  const FADE_MS = 500;
 
   React.useEffect(() => {
     if (!codigoObtenido) return;
 
-    // Monta y hace fade-in
     setShowConfetti(true);
-    // Permite al browser aplicar el transition
     const tIn = setTimeout(() => setConfettiVisible(true), 0);
-
-    // Inicia fade-out a los 4500ms y desmonta a los 5000ms
     const tOutStart = setTimeout(() => setConfettiVisible(false), 5000 - FADE_MS);
     const tOutEnd = setTimeout(() => setShowConfetti(false), 5000);
 
@@ -200,6 +201,10 @@ export default function SubscriberDashboard() {
       clearTimeout(tOutEnd);
     };
   }, [codigoObtenido]);
+
+  // Cap de piezas en función del área para evitar lags
+  const pieces =
+    width && height ? Math.min(500, Math.round((width * height) / 8000)) : 200;
 
   if (loading) {
     return (
@@ -219,8 +224,8 @@ export default function SubscriberDashboard() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white p-6">
-      {/* 🎉 Confetti con fade-in/out y 5s de vida total */}
-      {showConfetti && (
+      {/* 🎉 Confetti solo si hay tamaño válido */}
+      {showConfetti && width > 0 && height > 0 && (
         <div
           className="pointer-events-none fixed inset-0 z-50"
           style={{
@@ -228,12 +233,14 @@ export default function SubscriberDashboard() {
             transition: `opacity ${FADE_MS}ms ease`,
           }}
         >
-          <Confetti
-            width={width || undefined}
-            height={height || undefined}
-            numberOfPieces={400}
-            recycle={false}
-          />
+          <React.Suspense fallback={null}>
+            <LazyConfetti
+              width={width}
+              height={height}
+              numberOfPieces={pieces}
+              recycle={false}
+            />
+          </React.Suspense>
         </div>
       )}
 
@@ -276,18 +283,21 @@ export default function SubscriberDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {(["10%", "20%", "40%"] as Descuento[]).map((d) => {
             const cost = costos[d];
+            const costKnown = Number.isFinite(cost);
             const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
-            const notEnough = Number.isFinite(cost) && falta > 0;
-            const disabled = !!claiming || loadingCosts || notEnough;
+            const notEnough = costKnown && falta > 0;
+
+            // ✅ Solo habilitamos si: costo conocido Y alcanza puntos Y no se está canjeando ni cargando
+            const disabled = !!claiming || loadingCosts || !costKnown || notEnough;
 
             return (
               <CouponCard
                 key={d}
                 label={d}
-                cost={Number.isFinite(cost) ? cost : undefined}
+                cost={costKnown ? (cost as number) : undefined}
                 loading={claiming === d}
                 disabled={disabled}
-                reason={notEnough ? `Te faltan ${falta} pts` : null}
+                reason={!costKnown ? "Cargando costo…" : notEnough ? `Te faltan ${falta} pts` : null}
                 onClick={() => {
                   if (disabled) return;
                   onClaim(d);
