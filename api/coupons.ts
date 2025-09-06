@@ -6,11 +6,7 @@ import jwt from "jsonwebtoken";
 type Descuento = "10%" | "20%" | "40%";
 type Costs = { ["10%"]?: number; ["20%"]?: number; ["40%"]?: number };
 
-/* =========================
-   Auth helpers
-   ========================= */
-
-// 1) Preferimos Firebase ID Token en Authorization: Bearer <token>
+/* ========= Auth helpers ========= */
 async function getUserFromBearer(req: VercelRequest) {
   const authHeader = req.headers.authorization || "";
   if (!authHeader.startsWith("Bearer ")) return null;
@@ -28,7 +24,6 @@ async function getUserFromBearer(req: VercelRequest) {
   }
 }
 
-// 2) Fallback: cookie vg_session firmada con JWT_SECRET
 function getUserFromCookie(req: VercelRequest) {
   const cookie = req.headers.cookie || "";
   const m = cookie.match(/(?:^|;\s*)vg_session=([^;]+)/);
@@ -49,24 +44,19 @@ function getUserFromCookie(req: VercelRequest) {
   }
 }
 
-// 3) Unificador
 async function getCurrentUser(req: VercelRequest) {
   const bearer = await getUserFromBearer(req);
   if (bearer) return bearer;
   return getUserFromCookie(req);
 }
 
-/* =========================
-   Utils
-   ========================= */
+/* ========= Utils ========= */
 function sanitizeInt(n: any): number {
   const v = Number(n);
   return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
 }
 
-/* =========================
-   Handler
-   ========================= */
+/* ========= Handler ========= */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getCurrentUser(req);
   if (!user) {
@@ -74,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // === GET ?action=costs -> leer costos ===
+  // === GET ?action=costs ===
   if (req.method === "GET") {
     const action = String((req.query?.action ?? "") as any);
     if (action === "costs") {
@@ -95,17 +85,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       return;
     }
-
     res.status(400).json({ error: "Invalid GET action" });
     return;
   }
 
-  // === POST con action en body ===
+  // === POST ===
   if (req.method === "POST") {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const action = String(body?.action || "");
 
-    // Reclamar cupón (descuenta puntos + marca cupón usado)
+    // --- CLAIM ---
     if (action === "claim") {
       const descuento = String(body?.descuento || "");
       if (!["10%", "20%", "40%"].includes(descuento)) {
@@ -115,56 +104,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       try {
         const result = await adminDb.runTransaction(async (tx) => {
-          // 1) Precio del cupón
+          // 1) costo
           const pricingRef = adminDb.collection("settings").doc("couponsPricing");
           const pricingSnap = await tx.get(pricingRef);
           const pricing = (pricingSnap.exists ? pricingSnap.data() : {}) as any;
           const cost = Number(pricing?.costPerDiscount?.[descuento] ?? 0);
           const costo = Number.isFinite(cost) && cost > 0 ? Math.floor(cost) : 0;
 
-          // 2) Socio (user.id = VGxx)
+          // 2) socio
           const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
           const memberSnap = await tx.get(memberRef);
-          if (!memberSnap.exists) {
-            return { ok: false as const, reason: "member_not_found" };
-          }
+          if (!memberSnap.exists) return { ok: false as const, reason: "member_not_found" };
           const member = memberSnap.data() as any;
           const prevPoints = Number(member?.puntos ?? 0);
-
           if (prevPoints < costo) {
-            return {
-              ok: false as const,
-              reason: "insufficient_points",
-              need: costo,
-              have: prevPoints,
-            };
+            return { ok: false as const, reason: "insufficient_points", need: costo, have: prevPoints };
           }
 
-          // 3) Un cupón disponible (SOLO por status)
+          // 3) cupón disponible (SOLO booleano disponible)
           const q = adminDb
             .collection("cupones")
             .where("descuento", "==", descuento)
-            .where("status", "==", "disponible")
+            .where("disponible", "==", true)
             .limit(1);
+
           const cupSnap = await tx.get(q);
-          if (cupSnap.empty) {
-            return { ok: false as const, reason: "no_available" };
-          }
+          if (cupSnap.empty) return { ok: false as const, reason: "no_available" };
           const cupDoc = cupSnap.docs[0];
           const cupRef = cupDoc.ref;
           const cupData = cupDoc.data() as any;
 
-          // 4) Actualizaciones atómicas
+          // 4) updates atómicos
           const newPoints = prevPoints - costo;
 
-          // 4a) Descontar puntos del socio
           tx.update(memberRef, {
             puntos: newPoints,
             ultimaActualizacion: FieldValue.serverTimestamp(),
             ultimoMotivo: `canje cupón ${descuento}`,
           });
 
-          // 4b) Log de movimiento
           const logRef = adminDb.collection("movimientos").doc();
           tx.set(logRef, {
             memberId: String(user.id),
@@ -175,30 +153,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             newPoints,
             reason: `canje cupón ${descuento}`,
             createdAt: FieldValue.serverTimestamp(),
-            autorUid: user.id, // opcional
+            autorUid: user.id,
           });
 
-          // 4c) Marcar cupón como usado
+          // marca de uso con booleano
           tx.update(cupRef, {
-            status: "usado",
+            disponible: false,
             usadoPor: user.id,
             usadoEmail: user.email || null,
             usadoAt: FieldValue.serverTimestamp(),
           });
 
-          // 5) Respuesta
-          return {
-            ok: true as const,
-            codigo: String(cupData?.codigo || ""),
-            newPoints,
-            cost: costo,
-          };
+          return { ok: true as const, codigo: String(cupData?.codigo || ""), newPoints, cost: costo };
         });
 
-        // === Salidas no exitosas controladas ===
         if (!result.ok) {
           if (result.reason === "insufficient_points") {
-            res.status(409).json({ error: "insufficient_points", need: (result as any).need, have: (result as any).have });
+            res.status(409).json({ error: "insufficient_points", need: result.need, have: result.have });
             return;
           }
           if (result.reason === "no_available") {
@@ -213,45 +184,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
 
-        // === Guardas de éxito (anti “falso OK”) ===
-        const codigo = (result as any)?.codigo;
-        const newPoints = (result as any)?.newPoints;
-        const cost = (result as any)?.cost;
-
-        if (typeof codigo !== "string" || codigo.trim().length === 0) {
-          console.error("[claim] invalid success payload: codigo vacío", { result });
-          res.status(500).json({ error: "Invalid success payload (codigo)" });
-          return;
-        }
-        if (!Number.isFinite(newPoints)) {
-          console.error("[claim] invalid success payload: newPoints inválido", { result });
-          res.status(500).json({ error: "Invalid success payload (newPoints)" });
-          return;
-        }
-        if (!Number.isFinite(cost)) {
-          console.error("[claim] invalid success payload: cost inválido", { result });
-          res.status(500).json({ error: "Invalid success payload (cost)" });
-          return;
-        }
-
         res.status(200).json({
-          codigo,
-          newPoints,
-          cost,
+          codigo: result.codigo,
+          newPoints: result.newPoints,
+          cost: result.cost,
         });
       } catch (e) {
-        // Si Firestore pide índice compuesto (descuento + status), crealo desde el link del error
+        // si pide índice (descuento+disponible) crealo desde el link
         console.error("[POST /api/coupons claim] error", e);
         res.status(500).json({ error: "Internal error" });
       }
       return;
     }
 
-    // Crear cupón (SOLO usa `status`)
+    // --- CREATE ---
     if (action === "create") {
       const descuento = body?.descuento as Descuento;
       const codigo = String(body?.codigo || "").trim();
-
       if (!["10%", "20%", "40%"].includes(descuento as any)) {
         res.status(400).json({ error: "Invalid descuento" });
         return;
@@ -260,12 +209,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: "Invalid codigo" });
         return;
       }
-
       try {
         const ref = await adminDb.collection("cupones").add({
           descuento,
           codigo,
-          status: "disponible", // <-- Único flag de disponibilidad
+          disponible: true,               // ✅ único flag de disponibilidad
           createdAt: FieldValue.serverTimestamp(),
           createdBy: user.email,
         });
@@ -277,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Guardar costos
+    // --- SAVE COSTS ---
     if (action === "save_costs") {
       const costPerDiscount = (body?.costPerDiscount ?? {}) as Costs;
       try {
