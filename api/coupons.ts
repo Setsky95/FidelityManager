@@ -33,11 +33,9 @@ function getUserFromCookie(req: VercelRequest) {
   const cookie = req.headers.cookie || "";
   const m = cookie.match(/(?:^|;\s*)vg_session=([^;]+)/);
   if (!m) return null;
-
   const token = decodeURIComponent(m[1]);
   const secret = process.env.JWT_SECRET;
   if (!secret) return null;
-
   try {
     const p = jwt.verify(token, secret) as any;
     return {
@@ -51,7 +49,7 @@ function getUserFromCookie(req: VercelRequest) {
   }
 }
 
-// 3) Unifica: intenta Bearer y, si no, cookie
+// 3) Unificador
 async function getCurrentUser(req: VercelRequest) {
   const bearer = await getUserFromBearer(req);
   if (bearer) return bearer;
@@ -66,59 +64,25 @@ function sanitizeInt(n: any): number {
   return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
 }
 
-function json(res: VercelResponse, code: number, data: any) {
-  res.status(code).setHeader("Content-Type", "application/json");
-  res.send(JSON.stringify(data));
-}
-
-/** Normaliza la acción tanto si llega por `?action=` / body.action
- *  como si llegó a `/api/coupons/claim` (vía catch-all). */
-function normalizeAction(req: VercelRequest) {
-  // por URL (catch-all)
-  try {
-    const path = (req.url || "").split("?")[0];
-    const last = path.split("/").filter(Boolean).at(-1);
-    if (last && last !== "coupons") return last; // p.ej. 'claim'
-  } catch {
-    /* ignore */
-  }
-
-  // por query
-  const qAction = (req.query?.action ?? "") as string;
-  if (qAction) return String(qAction);
-
-  // por body
-  if (req.method === "POST") {
-    const body = typeof req.body === "string" ? safeParse(req.body) : (req.body || {});
-    if (body?.action) return String(body.action);
-  }
-
-  return "";
-}
-
-function safeParse(s: string) {
-  try { return JSON.parse(s || "{}"); } catch { return {}; }
-}
-
 /* =========================
    Handler
    ========================= */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Auth para todo este endpoint (admin panel y dashboard emiten cookie o bearer)
   const user = await getCurrentUser(req);
-  if (!user) return json(res, 401, { error: "Not authenticated" });
-
-  // 👉 Si querés restringir sólo a admins algunas acciones, podés gatearlas con user.isAdmin
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
 
   // === GET ?action=costs -> leer costos ===
   if (req.method === "GET") {
-    const action = normalizeAction(req) || String((req.query?.action ?? "") as any);
+    const action = String((req.query?.action ?? "") as any);
     if (action === "costs") {
       try {
         const ref = adminDb.collection("settings").doc("couponsPricing");
         const snap = await ref.get();
         const data = snap.exists ? (snap.data() as any) : {};
-        return json(res, 200, {
+        res.status(200).json({
           costPerDiscount: {
             ["10%"]: data?.costPerDiscount?.["10%"] ?? 0,
             ["20%"]: data?.costPerDiscount?.["20%"] ?? 0,
@@ -127,24 +91,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (e) {
         console.error("[GET /api/coupons?action=costs] error", e);
-        return json(res, 500, { error: "Internal error" });
+        res.status(500).json({ error: "Internal error" });
       }
+      return;
     }
 
-    return json(res, 400, { error: "Invalid GET action" });
+    res.status(400).json({ error: "Invalid GET action" });
+    return;
   }
 
-  // === POST con action en body o en subruta ===
+  // === POST con action en body ===
   if (req.method === "POST") {
-    // parse body con seguridad
-    const body = typeof req.body === "string" ? safeParse(req.body) : (req.body || {});
-    const action = normalizeAction(req) || String(body?.action || "");
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const action = String(body?.action || "");
 
-    /* ====== CLAIM (descuenta puntos + asigna cupón) ====== */
+    // Reclamar cupón (descuenta puntos + marca cupón usado)
     if (action === "claim") {
       const descuento = String(body?.descuento || "");
       if (!["10%", "20%", "40%"].includes(descuento)) {
-        return json(res, 400, { error: "Invalid descuento" });
+        res.status(400).json({ error: "Invalid descuento" });
+        return;
       }
 
       try {
@@ -174,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             };
           }
 
-          // 3) Un cupón disponible
+          // 3) Un cupón disponible (SOLO por status)
           const q = adminDb
             .collection("cupones")
             .where("descuento", "==", descuento)
@@ -209,7 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             newPoints,
             reason: `canje cupón ${descuento}`,
             createdAt: FieldValue.serverTimestamp(),
-            autorUid: user.id,
+            autorUid: user.id, // opcional
           });
 
           // 4c) Marcar cupón como usado
@@ -221,27 +187,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
 
           // 5) Respuesta
-          return { ok: true as const, codigo: String(cupData?.codigo || ""), newPoints, cost: costo };
+          return {
+            ok: true as const,
+            codigo: String(cupData?.codigo || ""),
+            newPoints,
+            cost: costo,
+          };
         });
 
         if (!result.ok) {
           if (result.reason === "insufficient_points") {
-            return json(res, 409, {
-              error: "insufficient_points",
-              need: (result as any).need,
-              have: (result as any).have,
-            });
+            res.status(409).json({ error: "insufficient_points", need: result.need, have: result.have });
+            return;
           }
           if (result.reason === "no_available") {
-            return json(res, 404, { error: "no_available" });
+            res.status(404).json({ error: "no_available" });
+            return;
           }
           if (result.reason === "member_not_found") {
-            return json(res, 404, { error: "member_not_found" });
+            res.status(404).json({ error: "member_not_found" });
+            return;
           }
-          return json(res, 400, { error: "bad_request" });
+          res.status(400).json({ error: "bad_request" });
+          return;
         }
 
-        return json(res, 200, {
+        res.status(200).json({
           codigo: result.codigo,
           newPoints: result.newPoints,
           cost: result.cost,
@@ -249,39 +220,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (e) {
         // Si Firestore pide índice compuesto (descuento + status), crealo desde el link del error
         console.error("[POST /api/coupons claim] error", e);
-        return json(res, 500, { error: "Internal error" });
+        res.status(500).json({ error: "Internal error" });
       }
+      return;
     }
 
-    /* ====== CREATE ====== */
+    // Crear cupón (SOLO usa `status`)
     if (action === "create") {
       const descuento = body?.descuento as Descuento;
       const codigo = String(body?.codigo || "").trim();
 
       if (!["10%", "20%", "40%"].includes(descuento as any)) {
-        return json(res, 400, { error: "Invalid descuento" });
+        res.status(400).json({ error: "Invalid descuento" });
+        return;
       }
       if (!codigo) {
-        return json(res, 400, { error: "Invalid codigo" });
+        res.status(400).json({ error: "Invalid codigo" });
+        return;
       }
 
       try {
         const ref = await adminDb.collection("cupones").add({
           descuento,
           codigo,
-          status: "disponible",
-          disponible: true,
+          status: "disponible", // <-- Único flag de disponibilidad
           createdAt: FieldValue.serverTimestamp(),
           createdBy: user.email,
         });
-        return json(res, 200, { id: ref.id });
+        res.status(200).json({ id: ref.id });
       } catch (e) {
         console.error("[POST /api/coupons create] error", e);
-        return json(res, 500, { error: "Internal error" });
+        res.status(500).json({ error: "Internal error" });
       }
+      return;
     }
 
-    /* ====== SAVE COSTS ====== */
+    // Guardar costos
     if (action === "save_costs") {
       const costPerDiscount = (body?.costPerDiscount ?? {}) as Costs;
       try {
@@ -297,15 +271,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           { merge: true }
         );
-        return json(res, 200, { ok: true });
+        res.status(200).json({ ok: true });
       } catch (e) {
         console.error("[POST /api/coupons save_costs] error", e);
-        return json(res, 500, { error: "Internal error" });
+        res.status(500).json({ error: "Internal error" });
       }
+      return;
     }
 
-    return json(res, 400, { error: "Invalid POST action" });
+    res.status(400).json({ error: "Invalid POST action" });
+    return;
   }
 
-  return json(res, 405, { error: "Method not allowed" });
+  res.status(405).json({ error: "Method not allowed" });
 }
