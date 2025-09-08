@@ -3,8 +3,17 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
 
-type Descuento = "10%" | "20%" | "40%";
-type Costs = { ["10%"]?: number; ["20%"]?: number; ["40%"]?: number };
+/* ========= Tipos ========= */
+type Descuento = "10%" | "20%" | "50%" | "75%" | "Envio gratis";
+type Costs = {
+  ["10%"]?: number;
+  ["20%"]?: number;
+  ["50%"]?: number;
+  ["75%"]?: number;
+  ["Envio gratis"]?: number;
+};
+
+const ALLOWED: Descuento[] = ["10%", "20%", "50%", "75%", "Envio gratis"];
 
 /* ========= Auth helpers ========= */
 async function getUserFromBearer(req: VercelRequest) {
@@ -72,11 +81,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const ref = adminDb.collection("settings").doc("couponsPricing");
         const snap = await ref.get();
         const data = snap.exists ? (snap.data() as any) : {};
+        const cp = data?.costPerDiscount ?? {};
         res.status(200).json({
           costPerDiscount: {
-            ["10%"]: data?.costPerDiscount?.["10%"] ?? 0,
-            ["20%"]: data?.costPerDiscount?.["20%"] ?? 0,
-            ["40%"]: data?.costPerDiscount?.["40%"] ?? 0,
+            ["10%"]: cp["10%"] ?? 0,
+            ["20%"]: cp["20%"] ?? 0,
+            ["50%"]: cp["50%"] ?? 0,
+            ["75%"]: cp["75%"] ?? 0,
+            ["Envio gratis"]: cp["Envio gratis"] ?? 0,
           },
         });
       } catch (e) {
@@ -96,8 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- CLAIM ---
     if (action === "claim") {
-      const descuento = String(body?.descuento || "");
-      if (!["10%", "20%", "40%"].includes(descuento)) {
+      const descuento = String(body?.descuento || "") as Descuento;
+      if (!ALLOWED.includes(descuento)) {
         res.status(400).json({ error: "Invalid descuento" });
         return;
       }
@@ -199,9 +211,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- CREATE ---
     if (action === "create") {
-      const descuento = body?.descuento as Descuento;
+      const descuento = String(body?.descuento || "") as Descuento;
       const codigo = String(body?.codigo || "").trim();
-      if (!["10%", "20%", "40%"].includes(descuento as any)) {
+      if (!ALLOWED.includes(descuento)) {
         res.status(400).json({ error: "Invalid descuento" });
         return;
       }
@@ -234,7 +246,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             costPerDiscount: {
               ["10%"]: sanitizeInt(costPerDiscount["10%"]),
               ["20%"]: sanitizeInt(costPerDiscount["20%"]),
-              ["40%"]: sanitizeInt(costPerDiscount["40%"]),
+              ["50%"]: sanitizeInt(costPerDiscount["50%"]),
+              ["75%"]: sanitizeInt(costPerDiscount["75%"]),
+              ["Envio gratis"]: sanitizeInt(costPerDiscount["Envio gratis"]),
             },
             updatedAt: FieldValue.serverTimestamp(),
             updatedBy: user.email,

@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { claimCoupon, type Descuento } from "@/lib/coupons";
 import { getAuth } from "firebase/auth";
 
-/** Lazy Confetti para evitar SSR issues */
+// Lazy Confetti para evitar SSR issues
 const LazyConfetti = React.lazy(() => import("react-confetti"));
 
-/** Helper: trae costos del backend (usa Bearer si hay y cookie vg_session siempre) */
+// Orden y lista única de descuentos
+const DESCUENTOS: Descuento[] = ["10%", "20%", "50%", "75%", "Envio gratis"];
+
+/** Trae costos (usa Bearer si hay y cookie vg_session siempre) */
 async function fetchCosts(): Promise<Record<Descuento, number>> {
   let token: string | null = null;
   try {
@@ -28,10 +31,13 @@ async function fetchCosts(): Promise<Record<Descuento, number>> {
 
   if (!res.ok) throw new Error("No se pudieron obtener los costos.");
   const data = await res.json();
+  const cp = (data?.costPerDiscount ?? {}) as Record<string, number>;
   return {
-    "10%": Number(data?.costPerDiscount?.["10%"] ?? 0),
-    "20%": Number(data?.costPerDiscount?.["20%"] ?? 0),
-    "40%": Number(data?.costPerDiscount?.["40%"] ?? 0),
+    "10%": Number(cp["10%"] ?? 0),
+    "20%": Number(cp["20%"] ?? 0),
+    "50%": Number(cp["50%"] ?? 0),
+    "75%": Number(cp["75%"] ?? 0),
+    "Envio gratis": Number(cp["Envio gratis"] ?? 0),
   };
 }
 
@@ -112,7 +118,9 @@ export default function SubscriberDashboard() {
   const [costos, setCostos] = React.useState<Record<Descuento, number>>({
     "10%": 0,
     "20%": 0,
-    "40%": 0,
+    "50%": 0,
+    "75%": 0,
+    "Envio gratis": 0,
   });
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
@@ -181,7 +189,7 @@ export default function SubscriberDashboard() {
     }
   };
 
-  // ===== 🎉 Confetti con lazy load y fade =====
+  // 🎉 Confetti con lazy load y fade
   const { width, height } = useWindowSize();
   const [showConfetti, setShowConfetti] = React.useState(false);
   const [confettiVisible, setConfettiVisible] = React.useState(false);
@@ -189,12 +197,10 @@ export default function SubscriberDashboard() {
 
   React.useEffect(() => {
     if (!codigoObtenido) return;
-
     setShowConfetti(true);
     const tIn = setTimeout(() => setConfettiVisible(true), 0);
     const tOutStart = setTimeout(() => setConfettiVisible(false), 5000 - FADE_MS);
     const tOutEnd = setTimeout(() => setShowConfetti(false), 5000);
-
     return () => {
       clearTimeout(tIn);
       clearTimeout(tOutStart);
@@ -202,9 +208,13 @@ export default function SubscriberDashboard() {
     };
   }, [codigoObtenido]);
 
-  // Cap de piezas en función del área para evitar lags
-  const pieces =
-    width && height ? Math.min(500, Math.round((width * height) / 8000)) : 200;
+  const basePieces = width && height ? Math.round((width * height) / 8000) : 200;
+  const isMobile = width > 0 && width < 768;
+  const pieces = isMobile
+    ? Math.min(1000, Math.max(400, Math.round(basePieces * 2.2)))
+    : Math.min(600, Math.max(200, basePieces));
+  const canvasWidth = isMobile ? Math.round(width * 1.5) : width;
+  const canvasHeight = isMobile ? Math.round(height * 1.2) : height;
 
   if (loading) {
     return (
@@ -224,21 +234,19 @@ export default function SubscriberDashboard() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white p-6">
-      {/* 🎉 Confetti solo si hay tamaño válido */}
       {showConfetti && width > 0 && height > 0 && (
         <div
           className="pointer-events-none fixed inset-0 z-50"
-          style={{
-            opacity: confettiVisible ? 1 : 0,
-            transition: `opacity ${FADE_MS}ms ease`,
-          }}
+          style={{ opacity: confettiVisible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
         >
           <React.Suspense fallback={null}>
             <LazyConfetti
-              width={width}
-              height={height}
+              width={canvasWidth}
+              height={canvasHeight}
               numberOfPieces={pieces}
               recycle={false}
+              gravity={isMobile ? 0.25 : 0.2}
+              wind={0}
             />
           </React.Suspense>
         </div>
@@ -265,8 +273,7 @@ export default function SubscriberDashboard() {
         {/* Puntos */}
         <div className="mt-6">
           <p className="text-lg">
-            Tus puntos:{" "}
-            <span className="font-mono text-emerald-400">{puntosUI ?? 0}</span>
+            Tus puntos: <span className="font-mono text-emerald-400">{puntosUI ?? 0}</span>
           </p>
           <p className="text-sm text-neutral-400">ID de socio: {user.id}</p>
         </div>
@@ -274,20 +281,16 @@ export default function SubscriberDashboard() {
         {/* Título */}
         <div className="mt-8 text-center">
           <h2 className="text-lg font-semibold mb-2">Reclamar cupón</h2>
-          {loadingCosts && (
-            <p className="text-xs text-neutral-400 mb-2">Cargando costos…</p>
-          )}
+          {loadingCosts && <p className="text-xs text-neutral-400 mb-2">Cargando costos…</p>}
         </div>
 
         {/* Grid cupones */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {(["10%", "20%", "40%"] as Descuento[]).map((d) => {
+          {DESCUENTOS.map((d) => {
             const cost = costos[d];
             const costKnown = Number.isFinite(cost);
             const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
             const notEnough = costKnown && falta > 0;
-
-            // ✅ Solo habilitamos si: costo conocido Y alcanza puntos Y no se está canjeando ni cargando
             const disabled = !!claiming || loadingCosts || !costKnown || notEnough;
 
             return (
@@ -308,9 +311,7 @@ export default function SubscriberDashboard() {
         </div>
 
         {/* Mensajes y código */}
-        {mensaje && (
-          <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>
-        )}
+        {mensaje && <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>}
 
         {codigoObtenido && (
           <div className="mt-3 mx-auto max-w-md rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
@@ -318,18 +319,11 @@ export default function SubscriberDashboard() {
             <p className="text-xl font-mono">{codigoObtenido}</p>
 
             <div className="flex justify-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => navigator.clipboard.writeText(codigoObtenido)}
-              >
+              <Button variant="secondary" onClick={() => navigator.clipboard.writeText(codigoObtenido)}>
                 Copiar código
               </Button>
               <Button asChild>
-                <a
-                  href="https://menu.vangoghburger.com.ar/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href="https://menu.vangoghburger.com.ar/" target="_blank" rel="noopener noreferrer">
                   Hacer pedido
                 </a>
               </Button>
@@ -343,11 +337,7 @@ export default function SubscriberDashboard() {
             Cerrar sesión
           </Button>
           <Button asChild>
-            <a
-              href="https://menu.vangoghburger.com.ar/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://menu.vangoghburger.com.ar/" target="_blank" rel="noopener noreferrer">
               Ir a la tienda
             </a>
           </Button>

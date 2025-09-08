@@ -2,8 +2,8 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { getAuth } from "firebase/auth";
 
-type Descuento = "10%" | "20%" | "40%";
-const DESCUENTOS: Descuento[] = ["10%", "20%", "40%"];
+type Descuento = "10%" | "20%" | "50%" | "75%" | "Envio gratis";
+const DESCUENTOS: Descuento[] = ["10%", "20%", "50%", "75%", "Envio gratis"];
 
 export default function DescuentosPage() {
   // --- Crear cupón ---
@@ -16,7 +16,9 @@ export default function DescuentosPage() {
   const [costos, setCostos] = React.useState<Record<Descuento, number>>({
     "10%": 0,
     "20%": 0,
-    "40%": 0,
+    "50%": 0,
+    "75%": 0,
+    "Envio gratis": 0,
   });
   const [savingCosts, setSavingCosts] = React.useState(false);
   const [msgCosts, setMsgCosts] = React.useState<string | null>(null);
@@ -43,7 +45,9 @@ export default function DescuentosPage() {
           setCostos({
             "10%": Number(data?.costPerDiscount?.["10%"] ?? 0),
             "20%": Number(data?.costPerDiscount?.["20%"] ?? 0),
-            "40%": Number(data?.costPerDiscount?.["40%"] ?? 0),
+            "50%": Number(data?.costPerDiscount?.["50%"] ?? 0),
+            "75%": Number(data?.costPerDiscount?.["75%"] ?? 0),
+            "Envio gratis": Number(data?.costPerDiscount?.["Envio gratis"] ?? 0),
           });
         } else {
           const err = await res.json().catch(() => ({}));
@@ -122,18 +126,16 @@ export default function DescuentosPage() {
   };
 
   return (
-    <div className="min-h-screen  p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Descuentos</h1>
-          <p className="text-sm ">
-            Administrá cupones y el costo en puntos.
-          </p>
+          <p className="text-sm">Administrá cupones y el costo en puntos.</p>
         </header>
 
         {/* Crear cupón */}
-        <section className=" rounded-2xl border border-white/10 p-6">
+        <section className="rounded-2xl border border-white/10 p-6">
           <h2 className="text-xl font-semibold mb-4">Crear cupón</h2>
 
           <form onSubmit={createCoupon} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -142,7 +144,7 @@ export default function DescuentosPage() {
               <select
                 value={porcentaje}
                 onChange={(e) => setPorcentaje(e.target.value as Descuento)}
-                className="w-full rounded-lg  border border-white/10 px-3 py-2"
+                className="w-full rounded-lg border border-white/10 px-3 py-2"
               >
                 {DESCUENTOS.map((d) => (
                   <option key={d} value={d}>
@@ -153,12 +155,12 @@ export default function DescuentosPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-sm  mb-1">Código de cupón</label>
+              <label className="block text-sm mb-1">Código de cupón</label>
               <input
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
-                placeholder="VG-10-ABCD1234"
-                className="w-full rounded-lg  border border-white/10 px-3 py-2"
+                placeholder="VG-ENV-ABCD1234"
+                className="w-full rounded-lg border border-white/10 px-3 py-2"
               />
             </div>
 
@@ -169,24 +171,20 @@ export default function DescuentosPage() {
             </div>
           </form>
 
-          {msgCreate && <p className="mt-3 text-sm ">{msgCreate}</p>}
-
-       
+          {msgCreate && <p className="mt-3 text-sm">{msgCreate}</p>}
         </section>
 
         {/* Costos en puntos */}
-        <section className=" rounded-2xl border border-white/10 p-6">
+        <section className="rounded-2xl border border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Costo en puntos por descuento</h2>
-            {loadingCosts && (
-              <span className="text-xs ">Cargando…</span>
-            )}
+            {loadingCosts && <span className="text-xs">Cargando…</span>}
           </div>
 
           <form onSubmit={saveCosts} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {DESCUENTOS.map((d) => (
               <div key={d}>
-                <label className="block text-sm  mb-1">{d}</label>
+                <label className="block text-sm mb-1">{d}</label>
                 <input
                   type="number"
                   min={0}
@@ -197,7 +195,7 @@ export default function DescuentosPage() {
                       [d]: Math.max(0, Number(e.target.value || 0)),
                     }))
                   }
-                  className="w-full rounded-lg  border border-white/10 px-3 py-2"
+                  className="w-full rounded-lg border border-white/10 px-3 py-2"
                 />
               </div>
             ))}
