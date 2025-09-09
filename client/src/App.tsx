@@ -1,87 +1,317 @@
-// src/App.tsx
-import { Switch, Route } from "wouter";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
+import * as React from "react";
+import { useSubAuth } from "@/providers/SubAuthProvider";
+import { Button } from "@/components/ui/button";
+import { claimCoupon } from "@/lib/coupons";
+import { getAuth } from "firebase/auth";
 
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+const LazyConfetti = React.lazy(() => import("react-confetti"));
 
-import { PrivateRouteSubscriber } from "@/components/PrivateRouteSubscriber";
-import { PrivateRouteAdmin } from "@/components/PrivateRouteAdmin";
-import { SubAuthProvider } from "@/providers/SubAuthProvider";
-import { AdminAuthProvider } from "@/providers/AdminAuthProvider";
-import AdminLoginPage from "@/pages/admin-login";
+type DescuentoAPI = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";
+type DescuentoUI = "10%" | "20%" | "50%" | "75%" | "Envío gratis";
+const DESCUENTOS_UI: DescuentoUI[] = ["10%", "20%", "50%", "75%", "Envío gratis"];
 
-import { Sidebar } from "@/components/sidebar";
-import Dashboard from "@/pages/dashboard";
-import Members from "@/pages/members";
-import Reports from "@/pages/reports";
-import SignIn from "@/pages/sign-in";
-import NotFound from "@/pages/not-found";
-import Automations from "@/pages/automations";
-import SumatePage from "@/pages/SumatePage";
-import Listas from "@/pages/lists";
-import HomePage from "@/pages/homePage";
-import LoginPage from "@/pages/loginPage";
-import SubscriberDashboard from "@/pages/subscriber-dashboard";
-import Descuentos from "@/pages/descuentos";
+function uiToApi(d: DescuentoUI): DescuentoAPI {
+  if (d === "Envío gratis") return "envio_gratis";
+  // @ts-expect-error
+  return d;
+}
+function apiToUi(d: DescuentoAPI): DescuentoUI {
+  if (d === "envio_gratis") return "Envío gratis";
+  // @ts-expect-error
+  return d;
+}
 
-function ProtectedAdminArea() {
+async function fetchCosts(): Promise<Record<DescuentoUI, number>> {
+  let token: string | null = null;
+  try {
+    const auth = getAuth();
+    token = (await auth.currentUser?.getIdToken()) || null;
+  } catch {}
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch("/api/coupons?action=costs", { method: "GET", headers, credentials: "include" });
+  if (!res.ok) throw new Error("No se pudieron obtener los costos.");
+  const { costPerDiscount } = (await res.json()) as { costPerDiscount: Partial<Record<DescuentoAPI, number>> };
+  return {
+    "10%": Number(costPerDiscount["10%"] ?? 0),
+    "20%": Number(costPerDiscount["20%"] ?? 0),
+    "50%": Number(costPerDiscount["50%"] ?? 0),
+    "75%": Number(costPerDiscount["75%"] ?? 0),
+    "Envío gratis": Number(costPerDiscount["envio_gratis"] ?? 0),
+  };
+}
+
+function CouponCard({
+  label,
+  cost,
+  disabled,
+  reason,
+  onClick,
+  loading,
+}: {
+  label: DescuentoUI;
+  cost?: number;
+  disabled?: boolean;
+  loading?: boolean;
+  reason?: string | null;
+  onClick: () => void;
+}) {
   return (
-    <div className="flex h-screen bg-surface" data-testid="app-layout">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Switch>
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/members" component={Members} />
-          <Route path="/descuentos" component={Descuentos} />
-         <Route path="/reports" component={Reports} />
-          <Route path="/automations" component={Automations} />
-          <Route path="/listas" component={Listas} />
-          <Route component={NotFound} />
-        </Switch>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={reason || undefined}
+      className={[
+        "relative w-full h-36 sm:h-44 rounded-2xl", // ⬅️ más bajas en mobile
+        "border-2",
+        disabled ? "border-white/10 bg-neutral-900/50" : "border-white/15 bg-neutral-900/60",
+        disabled ? "" : "hover:border-white/30 hover:bg-neutral-900",
+        "transition-all duration-200",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-white/20",
+        "grid place-items-center px-4 text-center",
+      ].join(" ")}
+    >
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-3xl sm:text-4xl font-black tracking-tight">{label}</span>
+        <span className="text-xs text-neutral-400">
+          {typeof cost === "number" ? `Cuesta ${cost} pts` : "Descuento disponible"}
+        </span>
+        {reason && <span className="text-[11px] text-amber-400">{reason}</span>}
       </div>
-    </div>
+      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
+      {loading && (
+        <div className="absolute inset-0 bg-black/30 grid place-items-center rounded-2xl">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
+        </div>
+      )}
+    </button>
   );
 }
 
-export default function App() {
+function useWindowSize() {
+  const [size, setSize] = React.useState({ width: 0, height: 0 });
+  React.useEffect(() => {
+    const update = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return size;
+}
+
+export default function SubscriberDashboard() {
+  const { user, loading, logout } = useSubAuth();
+
+  const [claiming, setClaiming] = React.useState<DescuentoUI | null>(null);
+  const [mensaje, setMensaje] = React.useState<string | null>(null);
+  const [codigoObtenido, setCodigoObtenido] = React.useState<string | null>(null);
+
+  const [puntosUI, setPuntosUI] = React.useState<number>(user?.puntos ?? 0);
+  React.useEffect(() => setPuntosUI(user?.puntos ?? 0), [user?.puntos]);
+
+  const [costos, setCostos] = React.useState<Record<DescuentoUI, number>>({
+    "10%": 0,
+    "20%": 0,
+    "50%": 0,
+    "75%": 0,
+    "Envío gratis": 0,
+  });
+  const [loadingCosts, setLoadingCosts] = React.useState(true);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        setCostos(await fetchCosts());
+      } catch (e: any) {
+        console.warn("No se pudieron cargar los costos:", e?.message);
+      } finally {
+        setLoadingCosts(false);
+      }
+    })();
+  }, []);
+
+  const onClaim = async (descuentoUi: DescuentoUI) => {
+    if (!user) return;
+    setMensaje(null);
+    setCodigoObtenido(null);
+    setClaiming(descuentoUi);
+
+    try {
+      const res = await claimCoupon({ descuento: uiToApi(descuentoUi) as any });
+      if ((res as any)?.noAvailable || (res as any)?.error === "no_available") {
+        setMensaje(`No hay cupones ${descuentoUi} disponibles ahora mismo.`);
+        return;
+      }
+      if ((res as any)?.insufficient || (res as any)?.error === "insufficient_points") {
+        const need = (res as any)?.need ?? costos[descuentoUi] ?? 0;
+        const have = (res as any)?.have ?? (puntosUI ?? 0);
+        setMensaje(`No te alcanzan los puntos para ${descuentoUi}. Requerido: ${need}. Tenés: ${have}.`);
+        return;
+      }
+      const codigo = (res as any)?.codigo;
+      const newPoints = (res as any)?.newPoints;
+      const costFromServer = (res as any)?.cost;
+      if (typeof codigo !== "string" || !codigo.trim()) {
+        setMensaje("No se pudo reclamar el cupón en este momento. Intentá más tarde.");
+        return;
+      }
+      if (typeof newPoints === "number") setPuntosUI(newPoints);
+      const resolvedCost = Number.isFinite(costFromServer) ? costFromServer : (costos[descuentoUi] ?? 0);
+      setCodigoObtenido(codigo);
+      setMensaje(`¡Listo! Canjeaste un cupón ${descuentoUi} por ${resolvedCost} puntos.`);
+    } catch (err: any) {
+      setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
+    } finally {
+      setClaiming(null);
+    }
+  };
+
+  // 🎉 Confetti con más piezas en mobile
+  const { width, height } = useWindowSize();
+  const [showConfetti, setShowConfetti] = React.useState(false);
+  const [confettiVisible, setConfettiVisible] = React.useState(false);
+  const FADE_MS = 500;
+
+  React.useEffect(() => {
+    if (!codigoObtenido) return;
+    setShowConfetti(true);
+    const tIn = setTimeout(() => setConfettiVisible(true), 0);
+    const tOutStart = setTimeout(() => setConfettiVisible(false), 5000 - FADE_MS);
+    const tOutEnd = setTimeout(() => setShowConfetti(false), 5000);
+    return () => {
+      clearTimeout(tIn); clearTimeout(tOutStart); clearTimeout(tOutEnd);
+    };
+  }, [codigoObtenido]);
+
+  const isMobile = width > 0 && width < 768;
+  const pieces = isMobile ? 900 : 400;
+  const canvasWidth = isMobile ? Math.round(width * 1.2) : width;
+  const canvasHeight = isMobile ? Math.round(height * 1.2) : height;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center text-white bg-neutral-950">
+        <p>Cargando tu perfil…</p>
+      </div>
+    );
+  }
+  if (!user) {
+    return (
+      <div className="min-h-screen grid place-items-center text-white bg-neutral-950">
+        <p>No has iniciado sesión.</p>
+      </div>
+    );
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        {/* Contexto de SOCIO a nivel app */}
-        <SubAuthProvider>
-          <Switch>
-            {/* Públicas */}
-            <Route path="/admin-login" component={AdminLoginPage} />
-            <Route path="/login" component={LoginPage} />
-            <Route path="/sign-in" component={SignIn} />
-            <Route path="/sumate" component={SumatePage} />
-            <Route path="/" component={HomePage} />
+    <div className="min-h-screen bg-neutral-950 text-white p-4 sm:p-6">
+      {showConfetti && width > 0 && height > 0 && (
+        <div
+          className="pointer-events-none fixed inset-0 z-50"
+          style={{ opacity: confettiVisible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
+        >
+          <React.Suspense fallback={null}>
+            <LazyConfetti width={canvasWidth} height={canvasHeight} numberOfPieces={pieces} recycle={false} gravity={isMobile ? 0.27 : 0.22} wind={0} />
+          </React.Suspense>
+        </div>
+      )}
 
-            {/* Privada de SUSCRIPTOR */}
-            <Route path="/mi-cuenta">
-              <PrivateRouteSubscriber>
-                <SubscriberDashboard />
-              </PrivateRouteSubscriber>
-            </Route>
+      <div className="max-w-3xl mx-auto bg-neutral-900 rounded-2xl border border-white/10 p-4 sm:p-6">
+        {/* Header usuario — en mobile apilado, en desktop lado a lado */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
+          {/* Datos */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            {user.profilePicture && (
+              <img
+                src={user.profilePicture}
+                alt="Avatar"
+                className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 rounded-full border border-white/20 object-cover"
+              />
+            )}
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">
+                {user.nombre} {user.apellido}
+              </h1>
+              <p className="text-neutral-400 text-sm sm:text-base break-words">{user.email}</p>
+              <p className="text-xs text-neutral-500 mt-1">ID de socio: {user.id}</p>
+            </div>
+          </div>
 
-            {/* Área ADMIN protegida (envuelta con su propio provider) */}
-            <Route>
-              <AdminAuthProvider>
-                <PrivateRouteAdmin>
-                  <ProtectedAdminArea />
-                </PrivateRouteAdmin>
-              </AdminAuthProvider>
-            </Route>
+          {/* Puntos: abajo a la derecha en mobile; a la derecha en desktop */}
+          <div className="md:self-auto self-end bg-neutral-800/60 border border-white/10 rounded-2xl px-4 py-2 sm:px-5 sm:py-3 text-right">
+            <div className="text-[10px] sm:text-[11px] uppercase tracking-wide text-neutral-400">Tus puntos</div>
+            <div className="font-mono font-black text-3xl sm:text-4xl md:text-5xl text-emerald-400 leading-none">
+              {puntosUI ?? 0}
+            </div>
+          </div>
+        </div>
 
-            {/* 404 final */}
-            <Route component={NotFound} />
-          </Switch>
+        {/* Título */}
+        <div className="mt-6 sm:mt-8 text-center">
+          <h2 className="text-lg font-semibold mb-2">Reclamar cupón</h2>
+          {loadingCosts && <p className="text-xs text-neutral-400 mb-2">Cargando costos…</p>}
+        </div>
 
-          <Toaster />
-        </SubAuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+        {/* Grid cupones — mobile 2 columnas, desktop 3 */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+          {DESCUENTOS_UI.map((d) => {
+            const cost = costos[d];
+            const costKnown = Number.isFinite(cost);
+            const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
+            const notEnough = costKnown && falta > 0;
+            const disabled = !!claiming || loadingCosts || !costKnown || notEnough;
+
+            return (
+              <CouponCard
+                key={d}
+                label={d}
+                cost={costKnown ? (cost as number) : undefined}
+                loading={claiming === d}
+                disabled={disabled}
+                reason={!costKnown ? "Cargando costo…" : notEnough ? `Te faltan ${falta} pts` : null}
+                onClick={() => {
+                  if (disabled) return;
+                  onClaim(d);
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* Mensajes y código */}
+        {mensaje && <p className="mt-4 text-sm text-neutral-300 text-center">{mensaje}</p>}
+
+        {codigoObtenido && (
+          <div className="mt-3 mx-auto max-w-md rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
+            <p className="text-sm text-neutral-400">Tu código:</p>
+            <p className="text-xl font-mono">{codigoObtenido}</p>
+            <div className="flex justify-center gap-3">
+              <Button variant="secondary" onClick={() => navigator.clipboard.writeText(codigoObtenido)}>
+                Copiar código
+              </Button>
+              <Button asChild>
+                <a href="https://menu.vangoghburger.com.ar/" target="_blank" rel="noopener noreferrer">
+                  Hacer pedido
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Acciones */}
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <Button variant="secondary" onClick={logout}>
+            Cerrar sesión
+          </Button>
+          <Button asChild>
+            <a href="https://menu.vangoghburger.com.ar/" target="_blank" rel="noopener noreferrer">
+              Ir a la tienda
+            </a>
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
