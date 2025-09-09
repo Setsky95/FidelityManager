@@ -2,7 +2,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
-import { log } from "node:console";
 
 // 🔒 Fuerza runtime Node (Firebase Admin no funciona en Edge)
 export const config = { runtime: "nodejs" };
@@ -157,31 +156,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const costRaw = Number(pricing?.costPerDiscount?.[descuento] ?? 0);
           const costo = Number.isFinite(costRaw) && costRaw > 0 ? Math.floor(costRaw) : 0;
 
-          // 2) socio
-          const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
-          log("memberRef", memberRef);
-          log("user data", user.data);
+          // 2) socio: buscar SOLO por email normalizado
+          const emailNorm = String(user.email || "").trim().toLowerCase();
+          if (!emailNorm) return { ok: false as const, reason: "member_not_found" };
 
-          const memberSnap = await tx.get(memberRef);
-          if (!memberSnap.exists) return { ok: false as const, reason: "member_not_found" };
+          const qMember = adminDb
+            .collection("suscriptores")
+            .where("email", "==", emailNorm)
+            .limit(1);
+
+          const qsMember = await tx.get(qMember);
+          if (qsMember.empty) return { ok: false as const, reason: "member_not_found" };
+
+          const memberSnap = qsMember.docs[0];
+          const memberRef = memberSnap.ref;
           const member = memberSnap.data() as any;
+
           const prevPoints = Number(member?.puntos ?? 0);
           if (prevPoints < costo) {
             return { ok: false as const, reason: "insufficient_points", need: costo, have: prevPoints };
           }
 
           // 3) cupón disponible
-          const q = adminDb
+          const qCup = adminDb
             .collection("cupones")
             .where("descuento", "==", descuento)
             .where("disponible", "==", true)
             .limit(1);
 
-          const cupSnap = await tx.get(q);
+          const cupSnap = await tx.get(qCup);
           if (cupSnap.empty) return { ok: false as const, reason: "no_available" };
           const cupDoc = cupSnap.docs[0];
           const cupRef = cupDoc.ref;
           const cupData = cupDoc.data() as any;
+
+          // ID real del socio (doc id)
+          const memberId = memberRef.id;
 
           // 4) updates atómicos
           const newPoints = prevPoints - costo;
@@ -196,22 +206,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // 4b) log
           const logRef = adminDb.collection("movimientos").doc();
           tx.set(logRef, {
-            memberId: String(user.id),
-            email: user.email || null,
+            memberId,
+            email: emailNorm,
             type: "points_subtract",
             delta: -costo,
             previousPoints: prevPoints,
             newPoints,
             reason: `canje cupón ${descuento}`,
             createdAt: FieldValue.serverTimestamp(),
-            autorUid: user.id,
+            autorEmail: emailNorm,
           });
 
           // 4c) marcar cupón como usado
           tx.update(cupRef, {
             disponible: false,
-            usadoPor: user.id,
-            usadoEmail: user.email || null,
+            usadoPor: memberId,
+            usadoEmail: emailNorm,
             usadoAt: FieldValue.serverTimestamp(),
           });
 
