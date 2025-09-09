@@ -1,17 +1,37 @@
 import * as React from "react";
 import { useSubAuth } from "@/providers/SubAuthProvider";
 import { Button } from "@/components/ui/button";
-import { claimCoupon, type Descuento } from "@/lib/coupons";
+import { claimCoupon } from "@/lib/coupons"; // asume que hace POST /api/coupons { action:'claim', descuento }
 import { getAuth } from "firebase/auth";
 
 // Lazy Confetti para evitar SSR issues
 const LazyConfetti = React.lazy(() => import("react-confetti"));
 
-// Orden y lista única de descuentos
-const DESCUENTOS: Descuento[] = ["10%", "20%", "50%", "75%", "Envio gratis"];
+/** Claves que maneja el backend */
+type DescuentoAPI = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";
 
-/** Trae costos (usa Bearer si hay y cookie vg_session siempre) */
-async function fetchCosts(): Promise<Record<Descuento, number>> {
+/** Etiquetas que mostramos en UI */
+type DescuentoUI = "10%" | "20%" | "50%" | "75%" | "Envío gratis"; // podés sumar "40%" si lo usás
+
+// Si querés incluir 40% en la UI, habilitalo acá:
+const DESCUENTOS_UI: DescuentoUI[] = ["10%", "20%", /* "40%" as any,*/ "50%", "75%", "Envío gratis"];
+
+/** Normalización UI -> API */
+function uiToApi(d: DescuentoUI): DescuentoAPI {
+  if (d === "Envío gratis") return "envio_gratis";
+  // @ts-expect-error: si habilitás "40%", TypeScript lo acepta
+  return d;
+}
+
+/** Normalización API -> UI (para mostrar costos) */
+function apiToUi(d: DescuentoAPI): DescuentoUI {
+  if (d === "envio_gratis") return "Envío gratis";
+  // @ts-expect-error: si habilitás "40%", TypeScript lo acepta
+  return d;
+}
+
+/** Trae costos del backend tal como vienen y los mapea a UI */
+async function fetchCosts(): Promise<Record<DescuentoUI, number>> {
   let token: string | null = null;
   try {
     const auth = getAuth();
@@ -19,7 +39,6 @@ async function fetchCosts(): Promise<Record<Descuento, number>> {
   } catch {
     token = null;
   }
-
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -28,20 +47,26 @@ async function fetchCosts(): Promise<Record<Descuento, number>> {
     headers,
     credentials: "include",
   });
-
   if (!res.ok) throw new Error("No se pudieron obtener los costos.");
-  const data = await res.json();
-  const cp = (data?.costPerDiscount ?? {}) as Record<string, number>;
-  return {
-    "10%": Number(cp["10%"] ?? 0),
-    "20%": Number(cp["20%"] ?? 0),
-    "50%": Number(cp["50%"] ?? 0),
-    "75%": Number(cp["75%"] ?? 0),
-    "Envio gratis": Number(cp["Envio gratis"] ?? 0),
+
+  const { costPerDiscount } = await res.json() as {
+    costPerDiscount: Partial<Record<DescuentoAPI, number>>;
   };
+
+  // Mapear de claves API -> UI, dejando 0 por defecto si no viene
+  const out: Record<DescuentoUI, number> = {
+    "10%": Number(costPerDiscount["10%"] ?? 0),
+    "20%": Number(costPerDiscount["20%"] ?? 0),
+    // "40%": Number(costPerDiscount["40%"] ?? 0), // habilitar si usás 40% en la UI
+    "50%": Number(costPerDiscount["50%"] ?? 0),
+    "75%": Number(costPerDiscount["75%"] ?? 0),
+    "Envío gratis": Number(costPerDiscount["envio_gratis"] ?? 0),
+  } as any;
+
+  return out;
 }
 
-/** Card de cupón (sin imagen, con outline y % grande) */
+/** Card de cupón */
 function CouponCard({
   label,
   cost,
@@ -50,7 +75,7 @@ function CouponCard({
   onClick,
   loading,
 }: {
-  label: Descuento;
+  label: DescuentoUI;
   cost?: number;
   disabled?: boolean;
   loading?: boolean;
@@ -81,9 +106,7 @@ function CouponCard({
         </span>
         {reason && <span className="text-[11px] text-amber-400">{reason}</span>}
       </div>
-
       <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
-
       {loading && (
         <div className="absolute inset-0 bg-black/30 grid place-items-center rounded-2xl">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
@@ -108,19 +131,20 @@ function useWindowSize() {
 export default function SubscriberDashboard() {
   const { user, loading, logout } = useSubAuth();
 
-  const [claiming, setClaiming] = React.useState<Descuento | null>(null);
+  const [claiming, setClaiming] = React.useState<DescuentoUI | null>(null);
   const [mensaje, setMensaje] = React.useState<string | null>(null);
   const [codigoObtenido, setCodigoObtenido] = React.useState<string | null>(null);
 
   const [puntosUI, setPuntosUI] = React.useState<number>(user?.puntos ?? 0);
   React.useEffect(() => setPuntosUI(user?.puntos ?? 0), [user?.puntos]);
 
-  const [costos, setCostos] = React.useState<Record<Descuento, number>>({
+  const [costos, setCostos] = React.useState<Record<DescuentoUI, number>>({
     "10%": 0,
     "20%": 0,
+    // "40%": 0,
     "50%": 0,
     "75%": 0,
-    "Envio gratis": 0,
+    "Envío gratis": 0,
   });
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
@@ -137,34 +161,27 @@ export default function SubscriberDashboard() {
     })();
   }, []);
 
-  const onClaim = async (descuento: Descuento) => {
+  const onClaim = async (descuentoUi: DescuentoUI) => {
     if (!user) return;
     setMensaje(null);
     setCodigoObtenido(null);
-    setClaiming(descuento);
+    setClaiming(descuentoUi);
 
     try {
-      const cost = costos[descuento];
-      // Guardia: si no hay costo cargado o no alcanza, no seguimos
-      if (!Number.isFinite(cost) || (puntosUI ?? 0) < cost) {
-        const falta = Number.isFinite(cost) ? cost - (puntosUI ?? 0) : 0;
-        setMensaje(
-          Number.isFinite(cost) && falta > 0
-            ? `No te alcanzan los puntos para el ${descuento}. Te faltan ${falta}.`
-            : "No se pudo validar el costo del cupón."
-        );
+      // Simplificación: NO hacemos pre-validaciones complejas en el front.
+      // Mandamos el descuento normalizado y dejamos que el backend resuelva atomizando en la transacción.
+      const descuentoApi = uiToApi(descuentoUi);
+
+      const res = await claimCoupon({ descuento: descuentoApi as any }); // usa la clave backend
+
+      if ((res as any)?.noAvailable || (res as any)?.error === "no_available") {
+        setMensaje(`No hay cupones ${descuentoUi} disponibles ahora mismo.`);
         return;
       }
-
-      const res = await claimCoupon({ descuento });
-
-      if ((res as any)?.noAvailable) {
-        setMensaje(`No hay cupones ${descuento} disponibles ahora mismo.`);
-        return;
-      }
-      if ((res as any)?.insufficient) {
-        const { need, have } = res as any;
-        setMensaje(`No te alcanzan los puntos para el ${descuento}. Requerido: ${need}. Tenés: ${have}.`);
+      if ((res as any)?.insufficient || (res as any)?.error === "insufficient_points") {
+        const need = (res as any)?.need ?? costos[descuentoUi] ?? 0;
+        const have = (res as any)?.have ?? (puntosUI ?? 0);
+        setMensaje(`No te alcanzan los puntos para ${descuentoUi}. Requerido: ${need}. Tenés: ${have}.`);
         return;
       }
 
@@ -172,16 +189,18 @@ export default function SubscriberDashboard() {
       const newPoints = (res as any)?.newPoints;
       const costFromServer = (res as any)?.cost;
 
-      if (typeof codigo !== "string" || codigo.trim().length === 0) {
+      if (typeof codigo !== "string" || !codigo.trim()) {
         setMensaje("No se pudo reclamar el cupón en este momento. Probá de nuevo.");
         return;
       }
 
-      const resolvedCost = typeof costFromServer === "number" ? costFromServer : costos[descuento] ?? 0;
-
-      setCodigoObtenido(codigo);
+      // Actualizamos puntos si el backend los devuelve
       if (typeof newPoints === "number") setPuntosUI(newPoints);
-      setMensaje(`¡Listo! Canjeaste un cupón ${descuento} por ${resolvedCost} puntos.`);
+
+      // Mensaje final usando etiqueta UI
+      const resolvedCost = Number.isFinite(costFromServer) ? costFromServer : (costos[descuentoUi] ?? 0);
+      setCodigoObtenido(codigo);
+      setMensaje(`¡Listo! Canjeaste un cupón ${descuentoUi} por ${resolvedCost} puntos.`);
     } catch (err: any) {
       setMensaje(err?.message ?? "No se pudo reclamar el cupón.");
     } finally {
@@ -208,14 +227,6 @@ export default function SubscriberDashboard() {
     };
   }, [codigoObtenido]);
 
-  const basePieces = width && height ? Math.round((width * height) / 8000) : 200;
-  const isMobile = width > 0 && width < 768;
-  const pieces = isMobile
-    ? Math.min(1000, Math.max(400, Math.round(basePieces * 2.2)))
-    : Math.min(600, Math.max(200, basePieces));
-  const canvasWidth = isMobile ? Math.round(width * 1.5) : width;
-  const canvasHeight = isMobile ? Math.round(height * 1.2) : height;
-
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-white bg-neutral-950">
@@ -240,14 +251,7 @@ export default function SubscriberDashboard() {
           style={{ opacity: confettiVisible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
         >
           <React.Suspense fallback={null}>
-            <LazyConfetti
-              width={canvasWidth}
-              height={canvasHeight}
-              numberOfPieces={pieces}
-              recycle={false}
-              gravity={isMobile ? 0.25 : 0.2}
-              wind={0}
-            />
+            <LazyConfetti width={width} height={height} numberOfPieces={300} recycle={false} gravity={0.25} wind={0} />
           </React.Suspense>
         </div>
       )}
@@ -286,12 +290,10 @@ export default function SubscriberDashboard() {
 
         {/* Grid cupones */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {DESCUENTOS.map((d) => {
+          {DESCUENTOS_UI.map((d) => {
             const cost = costos[d];
             const costKnown = Number.isFinite(cost);
-            const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
-            const notEnough = costKnown && falta > 0;
-            const disabled = !!claiming || loadingCosts || !costKnown || notEnough;
+            const disabled = !!claiming || loadingCosts || !costKnown;
 
             return (
               <CouponCard
@@ -300,7 +302,7 @@ export default function SubscriberDashboard() {
                 cost={costKnown ? (cost as number) : undefined}
                 loading={claiming === d}
                 disabled={disabled}
-                reason={!costKnown ? "Cargando costo…" : notEnough ? `Te faltan ${falta} pts` : null}
+                reason={!costKnown ? "Cargando costo…" : null}
                 onClick={() => {
                   if (disabled) return;
                   onClaim(d);
