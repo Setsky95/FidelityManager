@@ -2,8 +2,24 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { getAuth } from "firebase/auth";
 
-type Descuento = "10%" | "20%" | "50%" | "75%" | "Envio gratis";
-const DESCUENTOS: Descuento[] = ["10%", "20%", "50%", "75%", "Envio gratis"];
+// Valores que entiende el backend:
+type Descuento =
+  | "10%"
+  | "20%"
+  | "40%"
+  | "50%"
+  | "75%"
+  | "envio_gratis";
+
+// Mapeo value (API) -> label (UI)
+const DESCUENTOS: { value: Descuento; label: string }[] = [
+  { value: "10%", label: "10%" },
+  { value: "20%", label: "20%" },
+  { value: "40%", label: "40%" },
+  { value: "50%", label: "50%" },
+  { value: "75%", label: "75%" },
+  { value: "envio_gratis", label: "Envío gratis" },
+];
 
 export default function DescuentosPage() {
   // --- Crear cupón ---
@@ -12,19 +28,19 @@ export default function DescuentosPage() {
   const [creating, setCreating] = React.useState(false);
   const [msgCreate, setMsgCreate] = React.useState<string | null>(null);
 
-  // --- Costos en puntos ---
+  // --- Costos en puntos (keys = values que entiende la API) ---
   const [costos, setCostos] = React.useState<Record<Descuento, number>>({
     "10%": 0,
     "20%": 0,
+    "40%": 0,
     "50%": 0,
     "75%": 0,
-    "Envio gratis": 0,
+    "envio_gratis": 0,
   });
   const [savingCosts, setSavingCosts] = React.useState(false);
   const [msgCosts, setMsgCosts] = React.useState<string | null>(null);
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
-  // helper: obtiene token o tira error legible
   const getIdTokenOrThrow = React.useCallback(async () => {
     const auth = getAuth();
     const token = await auth.currentUser?.getIdToken();
@@ -40,19 +56,20 @@ export default function DescuentosPage() {
         const res = await fetch("/api/coupons?action=costs", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
-          const data = await res.json();
-          setCostos({
-            "10%": Number(data?.costPerDiscount?.["10%"] ?? 0),
-            "20%": Number(data?.costPerDiscount?.["20%"] ?? 0),
-            "50%": Number(data?.costPerDiscount?.["50%"] ?? 0),
-            "75%": Number(data?.costPerDiscount?.["75%"] ?? 0),
-            "Envio gratis": Number(data?.costPerDiscount?.["Envio gratis"] ?? 0),
-          });
-        } else {
+        if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          setMsgCosts(err?.error || "No se pudieron cargar los costos.");
+          throw new Error(err?.error || "No se pudieron cargar los costos.");
         }
+        const data = await res.json();
+        const src = data?.costPerDiscount || {};
+        setCostos({
+          "10%": Number(src["10%"] ?? 0),
+          "20%": Number(src["20%"] ?? 0),
+          "40%": Number(src["40%"] ?? 0),
+          "50%": Number(src["50%"] ?? 0),
+          "75%": Number(src["75%"] ?? 0),
+          "envio_gratis": Number(src["envio_gratis"] ?? 0),
+        });
       } catch (e: any) {
         setMsgCosts(e?.message || "No se pudieron cargar los costos.");
       } finally {
@@ -79,6 +96,7 @@ export default function DescuentosPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        // Enviamos el value (API), no el label
         body: JSON.stringify({ action: "create", descuento: porcentaje, codigo }),
       });
 
@@ -109,6 +127,7 @@ export default function DescuentosPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        // Mandamos un objeto con las claves EXACTAS que entiende la API
         body: JSON.stringify({ action: "save_costs", costPerDiscount: costos }),
       });
 
@@ -147,8 +166,8 @@ export default function DescuentosPage() {
                 className="w-full rounded-lg border border-white/10 px-3 py-2"
               >
                 {DESCUENTOS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
+                  <option key={d.value} value={d.value}>
+                    {d.label}
                   </option>
                 ))}
               </select>
@@ -159,7 +178,7 @@ export default function DescuentosPage() {
               <input
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
-                placeholder="VG-ENV-ABCD1234"
+                placeholder="ABC123 o cualquier combinación"
                 className="w-full rounded-lg border border-white/10 px-3 py-2"
               />
             </div>
@@ -183,16 +202,16 @@ export default function DescuentosPage() {
 
           <form onSubmit={saveCosts} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {DESCUENTOS.map((d) => (
-              <div key={d}>
-                <label className="block text-sm mb-1">{d}</label>
+              <div key={d.value}>
+                <label className="block text-sm mb-1">{d.label}</label>
                 <input
                   type="number"
                   min={0}
-                  value={costos[d] ?? 0}
+                  value={costos[d.value] ?? 0}
                   onChange={(e) =>
                     setCostos((prev) => ({
                       ...prev,
-                      [d]: Math.max(0, Number(e.target.value || 0)),
+                      [d.value]: Math.max(0, Number(e.target.value || 0)),
                     }))
                   }
                   className="w-full rounded-lg border border-white/10 px-3 py-2"
