@@ -4,7 +4,7 @@ import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
 
 // 🔒 Fuerza runtime Node (Firebase Admin no funciona en Edge)
-export const config = { runtime: "nodejs18.x" };
+export const config = { runtime: "nodejs" };
 
 /* ========= Tipos / Const ========= */
 export type Descuento = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";

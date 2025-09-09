@@ -3,6 +3,9 @@ import { adminDb } from "../_lib/firebase.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+// Asegura runtime Node (Firebase Admin no funciona en Edge)
+export const config = { runtime: "nodejs" };
+
 const COOKIE_NAME = "vg_session";
 
 function setCookie(res: any, token: string, maxAgeSec: number) {
@@ -45,35 +48,48 @@ function toMaxAgeSec(expires: Exp): number {
 export default async function handler(req: any, res: any) {
   try {
     if (req.method !== "POST") return res.status(405).end();
-    const { email, password } = req.body ?? {};
-    if (
-      !email || typeof email !== "string" || !email.includes("@") ||
-      !password || typeof password !== "string"
-    ) {
+
+    // 👇 Narrowing explícito y seguro
+    const rawEmail = req?.body?.email;
+    const rawPassword = req?.body?.password;
+
+    const email = typeof rawEmail === "string" ? rawEmail : undefined;
+    const password = typeof rawPassword === "string" ? rawPassword : undefined;
+
+    if (!email || !email.includes("@") || !password) {
       return res.status(400).json({ ok: false, error: "Datos inválidos" });
     }
 
+    const emailStr = email.trim().toLowerCase();
+    const passwordStr = password; // ya fue verificado como string
+
     const snap = await adminDb
       .collection("suscriptores")
-      .where("email", "==", email.trim().toLowerCase())
+      .where("email", "==", emailStr)
       .limit(1)
       .get();
 
-    if (snap.empty) return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
-    const member: any = snap.docs[0].data();
-
-    if (!member?.passwordHash) {
+    if (snap.empty) {
       return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
     }
-    const ok = await bcrypt.compare(password, member.passwordHash);
-    if (!ok) return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
+
+    const member: any = snap.docs[0].data();
+
+    if (!member?.passwordHash || typeof member.passwordHash !== "string") {
+      return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
+    }
+
+    const ok = await bcrypt.compare(passwordStr, member.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
+    }
 
     const payload = {
-      id: member.id,
-      numero: member.numero,
-      email: member.email,
-      nombre: member.nombre,
-      apellido: member.apellido,
+      id: member.id ?? null,
+      numero: member.numero ?? null,
+      email: member.email ?? emailStr,
+      nombre: member.nombre ?? null,
+      apellido: member.apellido ?? null,
       profilePicture: member.profilePicture || null,
     };
 
@@ -84,7 +100,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const expiresIn = resolveExpires(process.env.JWT_EXPIRES || "7d");
-    const token = jwt.sign(payload, secretEnv as jwt.Secret, { expiresIn }); // 👈 tipos correctos
+    const token = jwt.sign(payload, secretEnv as jwt.Secret, { expiresIn });
     setCookie(res, token, toMaxAgeSec(expiresIn));
 
     return res.status(200).json({ ok: true, member: payload });
