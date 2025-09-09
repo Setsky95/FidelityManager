@@ -160,9 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // 2) socio
           const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
           log("memberRef", memberRef);
-          log("user.id", user.id);
-          log("user.data.id", user.data.id);
-
+          log("user data", user.data);
 
           const memberSnap = await tx.get(memberRef);
           if (!memberSnap.exists) return { ok: false as const, reason: "member_not_found" };
