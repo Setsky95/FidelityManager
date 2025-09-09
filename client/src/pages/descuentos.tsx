@@ -3,13 +3,7 @@ import { Button } from "@/components/ui/button";
 import { getAuth } from "firebase/auth";
 
 // Valores que entiende el backend:
-type Descuento =
-  | "10%"
-  | "20%"
-  | "40%"
-  | "50%"
-  | "75%"
-  | "envio_gratis";
+type Descuento = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";
 
 // Mapeo value (API) -> label (UI)
 const DESCUENTOS: { value: Descuento; label: string }[] = [
@@ -28,7 +22,7 @@ export default function DescuentosPage() {
   const [creating, setCreating] = React.useState(false);
   const [msgCreate, setMsgCreate] = React.useState<string | null>(null);
 
-  // --- Costos en puntos (keys = values que entiende la API) ---
+  // --- Costos en puntos (keys = valores que entiende la API) ---
   const [costos, setCostos] = React.useState<Record<Descuento, number>>({
     "10%": 0,
     "20%": 0,
@@ -41,9 +35,10 @@ export default function DescuentosPage() {
   const [msgCosts, setMsgCosts] = React.useState<string | null>(null);
   const [loadingCosts, setLoadingCosts] = React.useState(true);
 
+  // 🔐 Siempre refrescamos el ID token antes de cada llamada crítica
   const getIdTokenOrThrow = React.useCallback(async () => {
     const auth = getAuth();
-    const token = await auth.currentUser?.getIdToken();
+    const token = await auth.currentUser?.getIdToken(true); // force refresh
     if (!token) throw new Error("Debés iniciar sesión como administrador.");
     return token;
   }, []);
@@ -54,14 +49,23 @@ export default function DescuentosPage() {
       try {
         const token = await getIdTokenOrThrow();
         const res = await fetch("/api/coupons?action=costs", {
+          method: "GET",
           headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
+
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error || "No se pudieron cargar los costos.");
+          const text = await res.text().catch(() => "");
+          let msg = "No se pudieron cargar los costos.";
+          try {
+            msg = JSON.parse(text)?.error || msg;
+          } catch {}
+          throw new Error(`${msg} (HTTP ${res.status})`);
         }
+
         const data = await res.json();
-        const src = data?.costPerDiscount || {};
+        const src = (data?.costPerDiscount ?? {}) as Partial<Record<Descuento, number>>;
+
         setCostos({
           "10%": Number(src["10%"] ?? 0),
           "20%": Number(src["20%"] ?? 0),
@@ -72,6 +76,7 @@ export default function DescuentosPage() {
         });
       } catch (e: any) {
         setMsgCosts(e?.message || "No se pudieron cargar los costos.");
+        // opcional: console.error("GET costs error:", e);
       } finally {
         setLoadingCosts(false);
       }
@@ -96,13 +101,18 @@ export default function DescuentosPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        // Enviamos el value (API), no el label
+        credentials: "include",
         body: JSON.stringify({ action: "create", descuento: porcentaje, codigo }),
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || "No se pudo crear el cupón.");
+        const text = await res.text().catch(() => "");
+        let msg = "No se pudo crear el cupón.";
+        try {
+          msg = JSON.parse(text)?.error || msg;
+        } catch {}
+        // opcional: console.error("Crear cupón fallo:", res.status, text);
+        throw new Error(`${msg} (HTTP ${res.status})`);
       }
 
       setCodigo("");
@@ -127,13 +137,18 @@ export default function DescuentosPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        // Mandamos un objeto con las claves EXACTAS que entiende la API
+        credentials: "include",
         body: JSON.stringify({ action: "save_costs", costPerDiscount: costos }),
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || "No se pudo guardar los costos.");
+        const text = await res.text().catch(() => "");
+        let msg = "No se pudo guardar los costos.";
+        try {
+          msg = JSON.parse(text)?.error || msg;
+        } catch {}
+        // opcional: console.error("Guardar costos fallo:", res.status, text);
+        throw new Error(`${msg} (HTTP ${res.status})`);
       }
 
       setMsgCosts("💾 Costos guardados.");
