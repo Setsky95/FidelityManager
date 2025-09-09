@@ -2,6 +2,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
+import { log } from "node:console";
 
 // 🔒 Fuerza runtime Node (Firebase Admin no funciona en Edge)
 export const config = { runtime: "nodejs" };
@@ -158,6 +159,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           // 2) socio
           const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
+          log("memberRef", memberRef);
+          log("user.id", user.id);
+          log("user.data.id", user.data.id);
+
+
           const memberSnap = await tx.get(memberRef);
           if (!memberSnap.exists) return { ok: false as const, reason: "member_not_found" };
           const member = memberSnap.data() as any;
