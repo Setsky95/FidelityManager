@@ -312,19 +312,65 @@ export default function SubscriberDashboard() {
             </div>
           </div>
         )}
+{/* Botones de acción */}
+<div className="mt-8 flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+  <a
+    href="/"
+    className="px-5 py-2 rounded-xl border border-white text-white text-sm sm:text-base font-medium text-center hover:bg-white/10 transition"
+  >
+    Inicio
+  </a>
+  <a
+    href="https://menu.vangoghburger.com.ar/"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="px-5 py-2 rounded-xl border border-white text-white text-sm sm:text-base font-medium text-center hover:bg-white/10 transition"
+  >
+    Hacer pedido
+  </a>
+  <button
+    onClick={logout}
+    className="px-5 py-2 rounded-xl border border-white text-white text-sm sm:text-base font-medium text-center hover:bg-white/10 transition"
+  >
+    Cerrar sesión
+  </button>
+</div>
 
         {/* Footer */}
-        <footer className="mt-10 pt-6 border-t border-white/10">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-sm">
-            <a className="hover:underline text-neutral-300" href="mailto:hola@vangoghburger.com.ar">Escribinos</a>
-            <a className="hover:underline text-neutral-300" href="https://maps.google.com/?q=Van+Gogh+Burger" target="_blank" rel="noreferrer">
-              Ubicación
-            </a>
-            <a className="hover:underline text-neutral-300" href="/nosotros">Nosotros</a>
-            <a className="hover:underline text-neutral-300" href="/mas-informacion">Más información</a>
-          </div>
-          <p className="mt-4 text-center text-xs text-neutral-500">© {new Date().getFullYear()} Club Van Gogh</p>
-        </footer>
+<footer className="mt-12 pt-10 pb-8 border-t border-white/10 bg-gradient-to-b from-neutral-900/60 via-neutral-900/40 to-neutral-950">
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-sm">
+    <a
+      className="hover:underline text-neutral-300 px-4 py-2 border border-neutral-500/60 rounded-lg transition"
+      href="mailto:hola@vangoghburger.com.ar"
+    >
+      Escribinos
+    </a>
+    <a
+      className="hover:underline text-neutral-300 px-4 py-2 border border-neutral-500/60 rounded-lg transition"
+      href="https://maps.google.com/?q=Van+Gogh+Burger"
+      target="_blank"
+      rel="noreferrer"
+    >
+      Ubicación
+    </a>
+    <a
+      className="hover:underline text-neutral-300 px-4 py-2 border border-neutral-500/60 rounded-lg transition"
+      href="/nosotros"
+    >
+      Nosotros
+    </a>
+    <a
+      className="hover:underline text-neutral-300 px-4 py-2 border border-neutral-500/60 rounded-lg transition"
+      href="/mas-informacion"
+    >
+      Más información
+    </a>
+  </div>
+  <p className="mt-6 text-center text-xs text-neutral-500">
+    © {new Date().getFullYear()} Club Van Gogh | 14 e/ 54 y 55 - La Plata
+  </p>
+</footer>
+
       </div>
 
       {/* Botón flotante de WhatsApp */}
