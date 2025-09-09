@@ -4,52 +4,34 @@ import { Button } from "@/components/ui/button";
 import { claimCoupon } from "@/lib/coupons";
 import { getAuth } from "firebase/auth";
 
-// Lazy Confetti para evitar SSR issues
 const LazyConfetti = React.lazy(() => import("react-confetti"));
 
-/** Claves backend */
 type DescuentoAPI = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";
-/** Etiquetas UI */
 type DescuentoUI = "10%" | "20%" | "50%" | "75%" | "Envío gratis";
-
 const DESCUENTOS_UI: DescuentoUI[] = ["10%", "20%", "50%", "75%", "Envío gratis"];
 
-/** Normalización UI -> API */
 function uiToApi(d: DescuentoUI): DescuentoAPI {
   if (d === "Envío gratis") return "envio_gratis";
   // @ts-expect-error
   return d;
 }
-/** Normalización API -> UI */
 function apiToUi(d: DescuentoAPI): DescuentoUI {
   if (d === "envio_gratis") return "Envío gratis";
   // @ts-expect-error
   return d;
 }
 
-/** Trae costos del backend tal como vienen y los mapea a UI */
 async function fetchCosts(): Promise<Record<DescuentoUI, number>> {
   let token: string | null = null;
   try {
     const auth = getAuth();
     token = (await auth.currentUser?.getIdToken()) || null;
-  } catch {
-    token = null;
-  }
+  } catch {}
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch("/api/coupons?action=costs", {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
+  const res = await fetch("/api/coupons?action=costs", { method: "GET", headers, credentials: "include" });
   if (!res.ok) throw new Error("No se pudieron obtener los costos.");
-
-  const { costPerDiscount } = (await res.json()) as {
-    costPerDiscount: Partial<Record<DescuentoAPI, number>>;
-  };
-
+  const { costPerDiscount } = (await res.json()) as { costPerDiscount: Partial<Record<DescuentoAPI, number>> };
   return {
     "10%": Number(costPerDiscount["10%"] ?? 0),
     "20%": Number(costPerDiscount["20%"] ?? 0),
@@ -59,7 +41,6 @@ async function fetchCosts(): Promise<Record<DescuentoUI, number>> {
   };
 }
 
-/** Card de cupón */
 function CouponCard({
   label,
   cost,
@@ -82,7 +63,7 @@ function CouponCard({
       onClick={onClick}
       title={reason || undefined}
       className={[
-        "relative w-full h-44 sm:h-48 rounded-2xl",
+        "relative w-full h-36 sm:h-44 rounded-2xl", // ⬅️ más bajas en mobile
         "border-2",
         disabled ? "border-white/10 bg-neutral-900/50" : "border-white/15 bg-neutral-900/60",
         disabled ? "" : "hover:border-white/30 hover:bg-neutral-900",
@@ -99,9 +80,7 @@ function CouponCard({
         </span>
         {reason && <span className="text-[11px] text-amber-400">{reason}</span>}
       </div>
-
       <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
-
       {loading && (
         <div className="absolute inset-0 bg-black/30 grid place-items-center rounded-2xl">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
@@ -111,7 +90,6 @@ function CouponCard({
   );
 }
 
-/** Hook mínimo para tamaño de ventana */
 function useWindowSize() {
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   React.useEffect(() => {
@@ -145,8 +123,7 @@ export default function SubscriberDashboard() {
   React.useEffect(() => {
     (async () => {
       try {
-        const c = await fetchCosts();
-        setCostos(c);
+        setCostos(await fetchCosts());
       } catch (e: any) {
         console.warn("No se pudieron cargar los costos:", e?.message);
       } finally {
@@ -162,9 +139,7 @@ export default function SubscriberDashboard() {
     setClaiming(descuentoUi);
 
     try {
-      const descuentoApi = uiToApi(descuentoUi);
-      const res = await claimCoupon({ descuento: descuentoApi as any });
-
+      const res = await claimCoupon({ descuento: uiToApi(descuentoUi) as any });
       if ((res as any)?.noAvailable || (res as any)?.error === "no_available") {
         setMensaje(`No hay cupones ${descuentoUi} disponibles ahora mismo.`);
         return;
@@ -175,18 +150,14 @@ export default function SubscriberDashboard() {
         setMensaje(`No te alcanzan los puntos para ${descuentoUi}. Requerido: ${need}. Tenés: ${have}.`);
         return;
       }
-
       const codigo = (res as any)?.codigo;
       const newPoints = (res as any)?.newPoints;
       const costFromServer = (res as any)?.cost;
-
       if (typeof codigo !== "string" || !codigo.trim()) {
-        setMensaje("No se pudo reclamar el cupón en este momento. Probá de nuevo.");
+        setMensaje("No se pudo reclamar el cupón en este momento. podés intentarlo más tarde.");
         return;
       }
-
       if (typeof newPoints === "number") setPuntosUI(newPoints);
-
       const resolvedCost = Number.isFinite(costFromServer) ? costFromServer : (costos[descuentoUi] ?? 0);
       setCodigoObtenido(codigo);
       setMensaje(`¡Listo! Canjeaste un cupón ${descuentoUi} por ${resolvedCost} puntos.`);
@@ -197,7 +168,7 @@ export default function SubscriberDashboard() {
     }
   };
 
-  // 🎉 Confetti con lazy load y más piezas en mobile
+  // 🎉 Confetti con más piezas en mobile
   const { width, height } = useWindowSize();
   const [showConfetti, setShowConfetti] = React.useState(false);
   const [confettiVisible, setConfettiVisible] = React.useState(false);
@@ -210,14 +181,12 @@ export default function SubscriberDashboard() {
     const tOutStart = setTimeout(() => setConfettiVisible(false), 5000 - FADE_MS);
     const tOutEnd = setTimeout(() => setShowConfetti(false), 5000);
     return () => {
-      clearTimeout(tIn);
-      clearTimeout(tOutStart);
-      clearTimeout(tOutEnd);
+      clearTimeout(tIn); clearTimeout(tOutStart); clearTimeout(tOutEnd);
     };
   }, [codigoObtenido]);
 
   const isMobile = width > 0 && width < 768;
-  const pieces = isMobile ? 900 : 400; // ⬅️ más papel picado en mobile
+  const pieces = isMobile ? 900 : 400;
   const canvasWidth = isMobile ? Math.round(width * 1.2) : width;
   const canvasHeight = isMobile ? Math.round(height * 1.2) : height;
 
@@ -228,7 +197,6 @@ export default function SubscriberDashboard() {
       </div>
     );
   }
-
   if (!user) {
     return (
       <div className="min-h-screen grid place-items-center text-white bg-neutral-950">
@@ -238,71 +206,61 @@ export default function SubscriberDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white p-6">
+    <div className="min-h-screen bg-neutral-950 text-white p-4 sm:p-6">
       {showConfetti && width > 0 && height > 0 && (
         <div
           className="pointer-events-none fixed inset-0 z-50"
           style={{ opacity: confettiVisible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
         >
           <React.Suspense fallback={null}>
-            <LazyConfetti
-              width={canvasWidth}
-              height={canvasHeight}
-              numberOfPieces={pieces}
-              recycle={false}
-              gravity={isMobile ? 0.27 : 0.22}
-              wind={0}
-            />
+            <LazyConfetti width={canvasWidth} height={canvasHeight} numberOfPieces={pieces} recycle={false} gravity={isMobile ? 0.27 : 0.22} wind={0} />
           </React.Suspense>
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto bg-neutral-900 rounded-2xl border border-white/10 p-6">
-        {/* Header usuario */}
-        <div className="flex items-center justify-between gap-6">
-          {/* Izquierda: foto + datos */}
-          <div className="flex items-center gap-4">
+      <div className="max-w-3xl mx-auto bg-neutral-900 rounded-2xl border border-white/10 p-4 sm:p-6">
+        {/* Header usuario — en mobile apilado, en desktop lado a lado */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
+          {/* Datos */}
+          <div className="flex items-center gap-3 sm:gap-4">
             {user.profilePicture && (
               <img
                 src={user.profilePicture}
                 alt="Avatar"
-                className="h-24 w-24 sm:h-28 sm:w-28 rounded-full border border-white/20 object-cover"
+                className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 rounded-full border border-white/20 object-cover"
               />
             )}
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold leading-tight">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">
                 {user.nombre} {user.apellido}
               </h1>
-              <p className="text-neutral-400 text-sm sm:text-base break-all">{user.email}</p>
+              <p className="text-neutral-400 text-sm sm:text-base break-words">{user.email}</p>
               <p className="text-xs text-neutral-500 mt-1">ID de socio: {user.id}</p>
             </div>
           </div>
 
-          {/* Derecha: puntos grandes */}
-          <div className="shrink-0 bg-neutral-800/60 border border-white/10 rounded-2xl px-5 py-3 text-right">
-            <div className="text-[11px] uppercase tracking-wide text-neutral-400">Tus puntos</div>
-            <div className="font-mono font-black text-4xl sm:text-5xl text-emerald-400 leading-none">
+          {/* Puntos: abajo a la derecha en mobile; a la derecha en desktop */}
+          <div className="md:self-auto self-end bg-neutral-800/60 border border-white/10 rounded-2xl px-4 py-2 sm:px-5 sm:py-3 text-right">
+            <div className="text-[10px] sm:text-[11px] uppercase tracking-wide text-neutral-400">Tus puntos</div>
+            <div className="font-mono font-black text-3xl sm:text-4xl md:text-5xl text-emerald-400 leading-none">
               {puntosUI ?? 0}
             </div>
           </div>
         </div>
 
         {/* Título */}
-        <div className="mt-8 text-center">
+        <div className="mt-6 sm:mt-8 text-center">
           <h2 className="text-lg font-semibold mb-2">Reclamar cupón</h2>
           {loadingCosts && <p className="text-xs text-neutral-400 mb-2">Cargando costos…</p>}
         </div>
 
         {/* Grid cupones — mobile 2 columnas, desktop 3 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           {DESCUENTOS_UI.map((d) => {
             const cost = costos[d];
             const costKnown = Number.isFinite(cost);
             const falta = Math.max(0, (cost ?? 0) - (puntosUI ?? 0));
             const notEnough = costKnown && falta > 0;
-
-            // Si no hay costo aún o está cargando, deshabilitamos.
-            // También deshabilitamos si no alcanza (solo muestra la leyenda).
             const disabled = !!claiming || loadingCosts || !costKnown || notEnough;
 
             return (
@@ -312,13 +270,7 @@ export default function SubscriberDashboard() {
                 cost={costKnown ? (cost as number) : undefined}
                 loading={claiming === d}
                 disabled={disabled}
-                reason={
-                  !costKnown
-                    ? "Cargando costo…"
-                    : notEnough
-                    ? `Te faltan ${falta} pts`
-                    : null
-                }
+                reason={!costKnown ? "Cargando costo…" : notEnough ? `Te faltan ${falta} pts` : null}
                 onClick={() => {
                   if (disabled) return;
                   onClaim(d);
@@ -335,7 +287,6 @@ export default function SubscriberDashboard() {
           <div className="mt-3 mx-auto max-w-md rounded-lg border border-white/10 bg-neutral-800 p-4 space-y-3">
             <p className="text-sm text-neutral-400">Tu código:</p>
             <p className="text-xl font-mono">{codigoObtenido}</p>
-
             <div className="flex justify-center gap-3">
               <Button variant="secondary" onClick={() => navigator.clipboard.writeText(codigoObtenido)}>
                 Copiar código
