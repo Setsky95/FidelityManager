@@ -3,14 +3,25 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { adminDb, FieldValue, adminAuth } from "./_lib/firebase.js";
 import jwt from "jsonwebtoken";
 
+// 🔒 Fuerza runtime Node (Firebase Admin no funciona en Edge)
+export const config = { runtime: "nodejs18.x" };
+
+/* ========= Tipos / Const ========= */
 export type Descuento = "10%" | "20%" | "40%" | "50%" | "75%" | "envio_gratis";
 
-const VALID_DESCUENTOS: Descuento[] = ["10%", "20%", "40%", "50%", "75%", "envio_gratis"];
+const VALID_DESCUENTOS: Descuento[] = [
+  "10%",
+  "20%",
+  "40%",
+  "50%",
+  "75%",
+  "envio_gratis",
+];
 
-function normalizeDescuento(input: any): Descuento | null {
+/** Normaliza entradas del front a las claves válidas del backend */
+function normalizeDescuento(input: unknown): Descuento | null {
   if (!input) return null;
-  const s = String(input).trim().toLowerCase().replace(/\s+/g, "_"); // pasa "Envio gratis" -> "envio_gratis"
-  // normalizar casos comunes
+  const s = String(input).trim().toLowerCase().replace(/\s+/g, "_");
   if (s === "envio_gratis" || s === "envío_gratis" || s === "envio__gratis") return "envio_gratis";
   if (s === "10%") return "10%";
   if (s === "20%") return "20%";
@@ -20,19 +31,82 @@ function normalizeDescuento(input: any): Descuento | null {
   return null;
 }
 
-// ... helpers de auth iguales ...
+type Costs = Partial<Record<Descuento, number>>;
 
+/* ========= Auth helpers ========= */
+async function getUserFromBearer(req: VercelRequest) {
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice("Bearer ".length);
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      id: decoded.uid,
+      email: decoded.email || "",
+      isAdmin: (decoded as any).admin === true,
+      raw: decoded,
+    };
+  } catch (e) {
+    console.error("[auth bearer] verifyIdToken error:", e);
+    return null;
+  }
+}
+
+function getUserFromCookie(req: VercelRequest) {
+  const cookie = req.headers.cookie || "";
+  const m = cookie.match(/(?:^|;\s*)vg_session=([^;]+)/);
+  if (!m) return null;
+  const token = decodeURIComponent(m[1]);
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn("JWT_SECRET missing (cookie auth no disponible)");
+    return null;
+  }
+  try {
+    const p = jwt.verify(token, secret) as any;
+    return {
+      id: String(p.id ?? p.userId),
+      email: String(p.email || ""),
+      isAdmin: p.admin === true || p.role === "admin",
+      raw: p,
+    };
+  } catch (e) {
+    console.error("[auth cookie] jwt.verify error:", e);
+    return null;
+  }
+}
+
+async function getCurrentUser(req: VercelRequest) {
+  const bearer = await getUserFromBearer(req);
+  if (bearer) return bearer;
+  return getUserFromCookie(req);
+}
+
+/* ========= Utils ========= */
+function sanitizeInt(n: unknown): number {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
+/* ========= Handler ========= */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Autenticación requerida para todas las acciones de este endpoint
   const user = await getCurrentUser(req);
   if (!user) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
 
+  // === GET ===
   if (req.method === "GET") {
     const action = String((req.query?.action ?? "") as any);
+
+    // --- GET ?action=costs ---
     if (action === "costs") {
       try {
+        if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+          console.error("FIREBASE_SERVICE_ACCOUNT_JSON missing");
+        }
         const ref = adminDb.collection("settings").doc("couponsPricing");
         const snap = await ref.get();
         const data = snap.exists ? (snap.data() as any) : {};
@@ -48,37 +122,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
 
         res.status(200).json({ costPerDiscount: out });
-      } catch (e) {
-        console.error("[GET /api/coupons?action=costs] error", e);
-        res.status(500).json({ error: "Internal error" });
+      } catch (e: any) {
+        console.error("[GET /api/coupons?action=costs] error:", e);
+        res.status(500).json({ error: `Internal error: ${e?.message || String(e)}` });
       }
       return;
     }
+
     res.status(400).json({ error: "Invalid GET action" });
     return;
   }
 
+  // === POST ===
   if (req.method === "POST") {
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const action = String(body?.action || "");
 
+    // --- POST claim ---
     if (action === "claim") {
-      const descuentoNorm = normalizeDescuento(body?.descuento);
-      if (!descuentoNorm || !VALID_DESCUENTOS.includes(descuentoNorm)) {
-        res.status(400).json({ error: "Invalid descuento" });
+      const descuento = normalizeDescuento(body?.descuento);
+      if (!descuento || !VALID_DESCUENTOS.includes(descuento)) {
+        res.status(400).json({ error: `Invalid descuento` });
         return;
       }
 
       try {
         const result = await adminDb.runTransaction(async (tx) => {
-          // costo
+          // 1) costo del cupón
           const pricingRef = adminDb.collection("settings").doc("couponsPricing");
           const pricingSnap = await tx.get(pricingRef);
           const pricing = (pricingSnap.exists ? pricingSnap.data() : {}) as any;
-          const costRaw = Number(pricing?.costPerDiscount?.[descuentoNorm] ?? 0);
+          const costRaw = Number(pricing?.costPerDiscount?.[descuento] ?? 0);
           const costo = Number.isFinite(costRaw) && costRaw > 0 ? Math.floor(costRaw) : 0;
 
-          // socio
+          // 2) socio
           const memberRef = adminDb.collection("suscriptores").doc(String(user.id));
           const memberSnap = await tx.get(memberRef);
           if (!memberSnap.exists) return { ok: false as const, reason: "member_not_found" };
@@ -88,10 +166,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return { ok: false as const, reason: "insufficient_points", need: costo, have: prevPoints };
           }
 
-          // cupón disponible
+          // 3) cupón disponible
           const q = adminDb
             .collection("cupones")
-            .where("descuento", "==", descuentoNorm)
+            .where("descuento", "==", descuento)
             .where("disponible", "==", true)
             .limit(1);
 
@@ -101,10 +179,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const cupRef = cupDoc.ref;
           const cupData = cupDoc.data() as any;
 
-          // updates atómicos
+          // 4) updates atómicos
           const newPoints = prevPoints - costo;
-          tx.update(memberRef, { puntos: newPoints, ultimaActualizacion: FieldValue.serverTimestamp(), ultimoMotivo: `canje cupón ${descuentoNorm}` });
 
+          // 4a) descontar puntos
+          tx.update(memberRef, {
+            puntos: newPoints,
+            ultimaActualizacion: FieldValue.serverTimestamp(),
+            ultimoMotivo: `canje cupón ${descuento}`,
+          });
+
+          // 4b) log
           const logRef = adminDb.collection("movimientos").doc();
           tx.set(logRef, {
             memberId: String(user.id),
@@ -113,11 +198,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             delta: -costo,
             previousPoints: prevPoints,
             newPoints,
-            reason: `canje cupón ${descuentoNorm}`,
+            reason: `canje cupón ${descuento}`,
             createdAt: FieldValue.serverTimestamp(),
             autorUid: user.id,
           });
 
+          // 4c) marcar cupón como usado
           tx.update(cupRef, {
             disponible: false,
             usadoPor: user.id,
@@ -125,19 +211,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             usadoAt: FieldValue.serverTimestamp(),
           });
 
-          return { ok: true as const, codigo: String(cupData?.codigo || ""), newPoints, cost: costo };
+          return {
+            ok: true as const,
+            codigo: String(cupData?.codigo || ""),
+            newPoints,
+            cost: costo,
+          };
         });
 
         if (!result.ok) {
-          if (result.reason === "insufficient_points") {
-            res.status(409).json({ error: "insufficient_points", need: (result as any).need, have: (result as any).have });
+          if ((result as any).reason === "insufficient_points") {
+            res.status(409).json({
+              error: "insufficient_points",
+              need: (result as any).need,
+              have: (result as any).have,
+            });
             return;
           }
-          if (result.reason === "no_available") {
+          if ((result as any).reason === "no_available") {
             res.status(404).json({ error: "no_available" });
             return;
           }
-          if (result.reason === "member_not_found") {
+          if ((result as any).reason === "member_not_found") {
             res.status(404).json({ error: "member_not_found" });
             return;
           }
@@ -145,16 +240,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
 
-        res.status(200).json({ codigo: result.codigo, newPoints: result.newPoints, cost: result.cost });
-      } catch (e) {
-        console.error("[POST /api/coupons claim] error", e);
-        res.status(500).json({ error: "Internal error" });
+        res.status(200).json({
+          codigo: (result as any).codigo,
+          newPoints: (result as any).newPoints,
+          cost: (result as any).cost,
+        });
+      } catch (e: any) {
+        console.error("[POST /api/coupons claim] error:", e);
+        res.status(500).json({ error: `Internal error: ${e?.message || String(e)}` });
       }
       return;
     }
 
-    // create y save_costs quedan igual…
-    // ...
+    // --- POST create ---
+    if (action === "create") {
+      try {
+        if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+          return res.status(500).json({ error: "Missing FIREBASE_SERVICE_ACCOUNT_JSON" });
+        }
+
+        const descuento = normalizeDescuento(body?.descuento);
+        const codigo = String(body?.codigo || "").trim();
+
+        if (!descuento || !VALID_DESCUENTOS.includes(descuento)) {
+          return res.status(400).json({ error: `Invalid descuento` });
+        }
+        if (!codigo) {
+          return res.status(400).json({ error: "Invalid codigo" });
+        }
+
+        const ref = await adminDb.collection("cupones").add({
+          descuento,
+          codigo,
+          disponible: true,
+          createdAt: FieldValue.serverTimestamp(),
+          createdBy: user.email || null,
+        });
+
+        res.status(200).json({ id: ref.id });
+      } catch (e: any) {
+        console.error("[POST /api/coupons create] error:", e);
+        res.status(500).json({ error: `Internal error: ${e?.message || String(e)}` });
+      }
+      return;
+    }
+
+    // --- POST save_costs ---
+    if (action === "save_costs") {
+      try {
+        if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+          return res.status(500).json({ error: "Missing FIREBASE_SERVICE_ACCOUNT_JSON" });
+        }
+
+        const costPerDiscountIn = (body?.costPerDiscount ?? {}) as Costs;
+
+        // saneamos TODAS las claves válidas
+        const sanitized: Costs = {};
+        for (const k of VALID_DESCUENTOS) {
+          const v = sanitizeInt(costPerDiscountIn[k]);
+          sanitized[k] = v;
+        }
+
+        await adminDb
+          .collection("settings")
+          .doc("couponsPricing")
+          .set(
+            {
+              costPerDiscount: sanitized,
+              updatedAt: FieldValue.serverTimestamp(),
+              updatedBy: user.email || null,
+            },
+            { merge: true }
+          );
+
+        res.status(200).json({ ok: true });
+      } catch (e: any) {
+        console.error("[POST /api/coupons save_costs] error:", e);
+        res.status(500).json({ error: `Internal error: ${e?.message || String(e)}` });
+      }
+      return;
+    }
+
+    res.status(400).json({ error: "Invalid POST action" });
+    return;
   }
 
   res.status(405).json({ error: "Method not allowed" });
