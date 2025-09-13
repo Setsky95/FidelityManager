@@ -51,15 +51,15 @@ export default function HomePage() {
             <ul className="mt-6 grid gap-2 text-sm text-neutral-300">
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                Inscripción en menos de 1 minuto
+                sumate en menos de 1 minuto
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                Beneficios exclusivos para socios
+                Obtené beneficios exclusivos
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                100% gratis
+               Es 100% gratis
               </li>
             </ul>
           </div>
