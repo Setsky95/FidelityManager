@@ -4,6 +4,9 @@
 @tailwind components;
 @tailwind utilities;
 
+.font-oswald { font-family: "Oswald", sans-serif; }
+
+
 :root {
   --background: hsl(249 10% 97%);
   --foreground: hsl(224 71% 4%);

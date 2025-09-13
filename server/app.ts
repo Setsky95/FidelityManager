@@ -26,7 +26,7 @@ app.use((req, res, next) => {
     captured = body;
     return orig(body, ...args);
   };
-
+ 
   res.on("finish", () => {
     const ms = Date.now() - start;
     if (path.startsWith("/api")) {
